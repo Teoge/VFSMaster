@@ -127,7 +127,7 @@ public class Master {
 		handle.put("fileInfo", fileInfo);
 
 		JSONArray chunkList = new JSONArray();
-		for (Integer chunkID : fileNode.chunkList) {
+		for (Integer chunkID : fileNode.chunkIDList) {
 			JSONObject chunk = new JSONObject();
 			ChunkInfo chunkInfo = chunkInfoList.get(chunkID);
 			chunk.put("chunkId", chunkInfo.chunkId);
@@ -184,7 +184,7 @@ public class Master {
 		}));
 
 		while (true) {
-
+			
 		}
 	}
 

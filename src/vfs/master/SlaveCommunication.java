@@ -35,8 +35,9 @@ public class SlaveCommunication {
 		}
 		protocolBuff[protocolBytes.length] = '\0';
 		out.write(protocolBuff, 0, protocolBuff.length);
-		
 		BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+		socket.close();
+		
 		JSONArray chucks = new JSONArray(in.readLine());
 		HashMap<Integer, ChunkInfo> chunkInfoList = new HashMap<Integer, ChunkInfo>();
 		for (int i = 0; i < chucks.length(); i++) {
@@ -49,6 +50,7 @@ public class SlaveCommunication {
 					chunk.getInt("chunk_left"));
 			chunkInfoList.put(chunkInfo.chunkId, chunkInfo);
 		}
+		
 		return chunkInfoList;
 	}
 
