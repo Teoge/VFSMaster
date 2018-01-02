@@ -25,15 +25,16 @@ public class Master {
 
 	private ArrayList<SlaveCommunication> slaves;
 
+	private HashMap<Integer, ChunkInfo> chunkInfoList;
+	
 	private static String serializedJSONFileName = "configuration.json";
 
 	public Master() {
 		readFromJSONFile();
-		HashMap<Integer, ChunkInfo> chunkList = new HashMap<Integer, ChunkInfo>();
+		chunkInfoList = new HashMap<Integer, ChunkInfo>();
 		for (SlaveCommunication slave : slaves) {
 			try {
-				slave.requestChunkInfo();
-				// TODO: process chunkList
+				chunkInfoList.putAll(slave.requestChunkInfo());
 			} catch (UnknownHostException e) {
 				slaves.remove(slave);
 			} catch (IOException e) {
@@ -126,8 +127,9 @@ public class Master {
 		handle.put("fileInfo", fileInfo);
 
 		JSONArray chunkList = new JSONArray();
-		for (ChunkInfo chunkInfo : fileNode.fileChunkTable.values()) {
+		for (Integer chunkID : fileNode.chunkList) {
 			JSONObject chunk = new JSONObject();
+			ChunkInfo chunkInfo = chunkInfoList.get(chunkID);
 			chunk.put("chunkId", chunkInfo.chunkId);
 			chunk.put("slaveIP", chunkInfo.slaveIP);
 			chunk.put("port", chunkInfo.port);
@@ -150,24 +152,24 @@ public class Master {
 		return fileNode;
 	}
 
-	private static void testWrite() {
-		FileNode test = new FileNode("vfs", true, null);
-		test.child = new FileNode("a", true, test);
-		test.child.brother = new FileNode("b", false, test);
-		test.child.brother.fileChunkTable = new HashMap<Integer, ChunkInfo>();
-		test.child.brother.fileChunkTable.put(1, new ChunkInfo(1, "10.60.41.1", 8888, 232, 234));
-		test.child.brother.fileChunkTable.put(2, new ChunkInfo(2, "10.65.7.1", 8888, 786, 231));
-		test.child.child = new FileNode("c", false, test.child);
-		test.child.child.fileChunkTable.put(1, new ChunkInfo(1, "10.60.255.1", 8888, 45, 689));
-		try {
-			FileWriter fileWriter = new FileWriter(serializedJSONFileName);
-			fileWriter.write(test.toJSON().toString());
-			fileWriter.close();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
+//	private static void testWrite() {
+//		FileNode test = new FileNode("vfs", true, null);
+//		test.child = new FileNode("a", true, test);
+//		test.child.brother = new FileNode("b", false, test);
+//		test.child.brother.fileChunkTable = new HashMap<Integer, ChunkInfo>();
+//		test.child.brother.fileChunkTable.put(1, new ChunkInfo(1, "10.60.41.1", 8888, 232, 234));
+//		test.child.brother.fileChunkTable.put(2, new ChunkInfo(2, "10.65.7.1", 8888, 786, 231));
+//		test.child.child = new FileNode("c", false, test.child);
+//		test.child.child.fileChunkTable.put(1, new ChunkInfo(1, "10.60.255.1", 8888, 45, 689));
+//		try {
+//			FileWriter fileWriter = new FileWriter(serializedJSONFileName);
+//			fileWriter.write(test.toJSON().toString());
+//			fileWriter.close();
+//		} catch (IOException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
+//	}
 
 	public static void main(String[] args) {
 		Master master = new Master();
