@@ -5,7 +5,9 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.net.UnknownHostException;
 import java.util.HashMap;
+import java.util.ArrayList;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -18,46 +20,101 @@ public class Master {
 
 	private FileNode root;
 
-	private int nextFileHandleID = 0;
-	
-	private String serializedJSONFileName = "file_hierachy.json";
+	private int nextFileHandleID;
+	private int nextChunkID;
+
+	private ArrayList<SlaveCommunication> slaves;
+
+	private static String serializedJSONFileName = "configuration.json";
 
 	public Master() {
-		String s = null;
+		readFromJSONFile();
+		HashMap<Integer, ChunkInfo> chunkList = new HashMap<Integer, ChunkInfo>();
+		for (SlaveCommunication slave : slaves) {
+			try {
+				slave.requestChunkInfo();
+				// TODO: process chunkList
+			} catch (UnknownHostException e) {
+				slaves.remove(slave);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	private void readFromJSONFile() {
 		try {
-			BufferedReader br = new BufferedReader(new FileReader(serializedJSONFileName));
 			StringBuilder sb = new StringBuilder();
+			BufferedReader br = new BufferedReader(new FileReader(serializedJSONFileName));
 			String line = br.readLine();
 			while (line != null) {
 				sb.append(line);
 				sb.append(System.lineSeparator());
 				line = br.readLine();
 			}
-			s = sb.toString();
 			br.close();
-		} catch (FileNotFoundException e) {
-			root = new FileNode("vfs", true);
+
+			JSONObject config = new JSONObject(sb.toString());
+			root = new FileNode();
+			root.parseJSON(config.getJSONObject("file_hierarchy"), null);
+			nextFileHandleID = config.getInt("next_file_handle_id");
+			nextChunkID = config.getInt("next_chunk_id");
+			JSONArray slavesArray = config.getJSONArray("slaves");
+			slaves = new ArrayList<SlaveCommunication>();
+			for (int i = 0; i < slavesArray.length(); i++) {
+				JSONObject obj = slavesArray.getJSONObject(i);
+				SlaveCommunication slave = new SlaveCommunication(obj.getString("IP"), obj.getInt("port"));
+				slaves.add(slave);
+			}
+		} catch (FileNotFoundException | JSONException e) {
+			root = new FileNode("vfs", true, null);
+			nextFileHandleID = 0;
+			nextChunkID = 0;
+			slaves = new ArrayList<SlaveCommunication>();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+	}
+
+	private void saveToJSONFile() {
+		JSONObject config = new JSONObject();
+		config.put("next_file_handle_id", nextFileHandleID);
+		config.put("next_chunk_id", nextChunkID);
+		config.put("file_hierarchy", root.toJSON());
+		JSONArray slavesArray = new JSONArray();
+		for (SlaveCommunication slave : slaves) {
+			JSONObject obj = new JSONObject();
+			obj.put("ip", slave.IP);
+			obj.put("port", slave.port);
+			slavesArray.put(obj);
+		}
+		config.put("slaves", slavesArray);
 		try {
-			root = new FileNode();
-			root.parseJSON(new JSONObject(s), null);
-		} catch (JSONException e) {
-			root = new FileNode("vfs", true);
+			FileWriter fileWriter = new FileWriter(serializedJSONFileName);
+			fileWriter.write(config.toString());
+			fileWriter.close();
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
-	
-	
 
-	public JSONObject open(String path, String mode) {
-		String[] names = path.split("[/\\\\]");
-		FileNode fileNode = root;
-		for (int i = 1; i < names.length; i++) {
-			fileNode = fileNode.findChildWithName(names[i]);
-			if (fileNode == null)
-				return null;
+	private boolean mkdir(String path, String dirName) {
+		FileNode fileNode = pathToFileNode(path);
+		if (fileNode == null)
+			return false;
+		FileNode parent = fileNode;
+		fileNode = fileNode.child;
+		while (fileNode != null) {
+			fileNode = fileNode.brother;
 		}
+		fileNode = new FileNode(dirName, true, parent);
+		return true;
+	}
+
+	private JSONObject open(String path, String mode) {
+		FileNode fileNode = pathToFileNode(path);
+		if (fileNode == null)
+			return null;
 		JSONObject handle = new JSONObject();
 		handle.put("handle", nextFileHandleID++);
 		handle.put("offset", 0);
@@ -82,17 +139,28 @@ public class Master {
 		return handle;
 	}
 
+	private FileNode pathToFileNode(String path) {
+		String[] names = path.split("[/\\\\]");
+		FileNode fileNode = root;
+		for (int i = 1; i < names.length; i++) {
+			fileNode = fileNode.findChildWithName(names[i]);
+			if (fileNode == null)
+				return null;
+		}
+		return fileNode;
+	}
+
 	private static void testWrite() {
-		FileNode test = new FileNode("vfs", true);
-		test.child = new FileNode("a", true);
-		test.child.brother = new FileNode("b", false);
+		FileNode test = new FileNode("vfs", true, null);
+		test.child = new FileNode("a", true, test);
+		test.child.brother = new FileNode("b", false, test);
 		test.child.brother.fileChunkTable = new HashMap<Integer, ChunkInfo>();
 		test.child.brother.fileChunkTable.put(1, new ChunkInfo(1, "10.60.41.1", 8888, 232, 234));
 		test.child.brother.fileChunkTable.put(2, new ChunkInfo(2, "10.65.7.1", 8888, 786, 231));
-		test.child.child = new FileNode("c", false);
+		test.child.child = new FileNode("c", false, test.child);
 		test.child.child.fileChunkTable.put(1, new ChunkInfo(1, "10.60.255.1", 8888, 45, 689));
 		try {
-			FileWriter fileWriter = new FileWriter("file_hierachy.json");
+			FileWriter fileWriter = new FileWriter(serializedJSONFileName);
 			fileWriter.write(test.toJSON().toString());
 			fileWriter.close();
 		} catch (IOException e) {
@@ -103,7 +171,19 @@ public class Master {
 
 	public static void main(String[] args) {
 		Master master = new Master();
-		System.out.println(master.open("vfs/b", ""));
+
+		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+			@Override
+			public void run() {
+				System.out.println();
+				System.out.println("Exiting...");
+				master.saveToJSONFile();
+			}
+		}));
+
+		while (true) {
+
+		}
 	}
 
 }
