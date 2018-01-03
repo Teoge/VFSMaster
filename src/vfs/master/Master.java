@@ -64,7 +64,7 @@ public class Master {
 			slaves = new ArrayList<SlaveCommunication>();
 			for (int i = 0; i < slavesArray.length(); i++) {
 				JSONObject obj = slavesArray.getJSONObject(i);
-				SlaveCommunication slave = new SlaveCommunication(obj.getString("IP"), obj.getInt("port"));
+				SlaveCommunication slave = new SlaveCommunication(obj.getString("ip"), obj.getInt("port"));
 				slaves.add(slave);
 			}
 		} catch (FileNotFoundException | JSONException e) {
@@ -173,6 +173,7 @@ public class Master {
 
 	public static void main(String[] args) {
 		Master master = new Master();
+		master.saveToJSONFile();
 
 		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
 			@Override
@@ -182,7 +183,6 @@ public class Master {
 				master.saveToJSONFile();
 			}
 		}));
-
 		while (true) {
 			
 		}
