@@ -5,6 +5,11 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.ArrayList;
@@ -26,7 +31,7 @@ public class Master {
 	private ArrayList<SlaveCommunication> slaves;
 
 	private HashMap<Integer, ChunkInfo> chunkInfoList;
-	
+
 	private static String serializedJSONFileName = "configuration.json";
 
 	public Master() {
@@ -36,7 +41,7 @@ public class Master {
 			try {
 				chunkInfoList.putAll(slave.requestChunkInfo());
 			} catch (UnknownHostException e) {
-				slaves.remove(slave);
+				// TODO
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -101,21 +106,69 @@ public class Master {
 
 	private boolean mkdir(String path, String dirName) {
 		FileNode fileNode = pathToFileNode(path);
-		if (fileNode == null)
+		if (fileNode == null || !checkFileName(dirName))
+			return false;
+		if (!fileNode.isDir)
 			return false;
 		FileNode parent = fileNode;
 		fileNode = fileNode.child;
 		while (fileNode != null) {
+			if (fileNode.fileName.equals(dirName))
+				return false;
 			fileNode = fileNode.brother;
 		}
 		fileNode = new FileNode(dirName, true, parent);
 		return true;
 	}
 
-	private JSONObject open(String path, String mode) {
+	private boolean remove(String path, String dirName) throws UnknownHostException, IOException {
 		FileNode fileNode = pathToFileNode(path);
 		if (fileNode == null)
+			return false;
+		FileNode parent = fileNode;
+		fileNode = parent.child;
+		if (fileNode != null) {
+			if (fileNode.fileName.equals(dirName)) {
+				parent.child = fileNode.brother;
+				fileNode.brother = null;
+				return releaseFileNode(fileNode);
+			}
+		} else {
+			return false;
+		}
+		FileNode bigBrother;
+		do {
+			if (fileNode.brother == null)
+				return false;
+			bigBrother = fileNode;
+			fileNode = fileNode.brother;
+		} while (fileNode.fileName != dirName);
+		bigBrother.brother = fileNode.brother;
+		fileNode.brother = null;
+		return releaseFileNode(fileNode);
+	}
+
+	private JSONObject open(String path, String name, String mode) {
+		FileNode parent = pathToFileNode(path);
+		if (parent == null)
 			return null;
+		FileNode fileNode = parent.findChildWithName(name);
+
+		// if not exist, create a new file
+		if (fileNode == null) {
+			if (parent.child == null) {
+				parent.child = new FileNode(name, false, parent);
+				fileNode = parent.child;
+			} else {
+				fileNode = parent.child;
+				while (fileNode.brother != null) {
+					fileNode = fileNode.brother;
+				}
+				fileNode.brother = new FileNode(name, false, parent);
+				fileNode = fileNode.brother;
+			}
+		}
+
 		JSONObject handle = new JSONObject();
 		handle.put("handle", nextFileHandleID++);
 		handle.put("offset", 0);
@@ -141,6 +194,43 @@ public class Master {
 		return handle;
 	}
 
+	private boolean checkFileName(String name) {
+		if (name.contains("/") || name.contains("\\\\") || name.contains(":") || name.contains("*")
+				|| name.contains("?") || name.contains("\"") || name.contains("<") || name.contains(">")
+				|| name.contains("|")) {
+			return false;
+		} else {
+			return true;
+		}
+	}
+
+	private boolean releaseFileNode(FileNode fileNode) throws UnknownHostException, IOException {
+		if (fileNode.isDir) {
+			if (fileNode.child != null)
+				releaseFileNode(fileNode.child);
+		} else {
+			for (int chunkID : fileNode.chunkIDList) {
+				SlaveCommunication slave = findSlaveWithIP(chunkInfoList.get(chunkID).slaveIP);
+				if (slave == null)
+					continue;
+				if (!slave.removeChunk(chunkID))
+					return false;
+			}
+		}
+		if (fileNode.brother != null)
+			releaseFileNode(fileNode.brother);
+		return true;
+	}
+
+	private SlaveCommunication findSlaveWithIP(String IP) {
+		for (SlaveCommunication slave : slaves) {
+			if (slave.IP.equals(IP)) {
+				return slave;
+			}
+		}
+		return null;
+	}
+
 	private FileNode pathToFileNode(String path) {
 		String[] names = path.split("[/\\\\]");
 		FileNode fileNode = root;
@@ -152,28 +242,51 @@ public class Master {
 		return fileNode;
 	}
 
-//	private static void testWrite() {
-//		FileNode test = new FileNode("vfs", true, null);
-//		test.child = new FileNode("a", true, test);
-//		test.child.brother = new FileNode("b", false, test);
-//		test.child.brother.fileChunkTable = new HashMap<Integer, ChunkInfo>();
-//		test.child.brother.fileChunkTable.put(1, new ChunkInfo(1, "10.60.41.1", 8888, 232, 234));
-//		test.child.brother.fileChunkTable.put(2, new ChunkInfo(2, "10.65.7.1", 8888, 786, 231));
-//		test.child.child = new FileNode("c", false, test.child);
-//		test.child.child.fileChunkTable.put(1, new ChunkInfo(1, "10.60.255.1", 8888, 45, 689));
-//		try {
-//			FileWriter fileWriter = new FileWriter(serializedJSONFileName);
-//			fileWriter.write(test.toJSON().toString());
-//			fileWriter.close();
-//		} catch (IOException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
-//	}
+	public class ClientWorker extends Thread {
+
+		int protocol;
+		InputStream in;
+		OutputStream out;
+
+		public ClientWorker(int protocol, InputStream in, OutputStream out) {
+			super();
+			this.protocol = protocol;
+			this.in = in;
+			this.out = out;
+		}
+
+		@Override
+		public void run() {
+			try {
+				String path = null;
+				String name = null;
+				String mode = null;
+				// TODO read path
+				switch (protocol) {
+				case 1:
+					Util.sendJSON(out, open(path, name, mode));
+					break;
+				case 2:
+					if (remove(path, name))
+						Util.sendProtocol(out, protocol);
+					break;
+				case 3:
+					// add chunk
+					break;
+				case 4:
+					// remove chunk
+					break;
+				default:
+					break;
+				}
+			} catch (IOException e) {
+
+			}
+		}
+	}
 
 	public static void main(String[] args) {
 		Master master = new Master();
-		master.saveToJSONFile();
 
 		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
 			@Override
@@ -184,7 +297,29 @@ public class Master {
 			}
 		}));
 		while (true) {
-			
+			// Listen to client
+			// 1. request file handle
+			// 2. remove file/folder?
+			// 3. add chunk? file handle?
+			// 4. remove chunk?
+			// Listen to slave
+			// 1. slave rent request?
+			// 2. heart beat request?
+			try (ServerSocket serverSocket = new ServerSocket(8192);// port
+					Socket clientSocket = serverSocket.accept();
+					OutputStream out = clientSocket.getOutputStream();
+					InputStream in = clientSocket.getInputStream();) {
+				byte[] protocolBuff = new byte[8];
+				while (true) {
+					in.read(protocolBuff, 0, 8);
+					int protocol = Integer.parseInt(protocolBuff.toString());
+					ClientWorker clientWorker = master.new ClientWorker(protocol, in, out);
+					clientWorker.start();
+				}
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 		}
 	}
 

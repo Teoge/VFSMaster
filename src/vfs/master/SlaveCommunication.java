@@ -30,7 +30,7 @@ public class SlaveCommunication {
 		Socket socket = new Socket(IP, port);
 		
 		// Send Request
-		sendProtocol(socket.getOutputStream(), VSFProtocols.INITIALIZE_CHUNK_INFO);
+		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.INITIALIZE_CHUNK_INFO);
 		
 		// Receive Data
 		BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -52,11 +52,11 @@ public class SlaveCommunication {
 		
 		// Send Request
 		OutputStream out = socket.getOutputStream();
-		sendProtocol(out, VSFProtocols.NEW_CHUNK);
+		Util.sendProtocol(out, VSFProtocols.NEW_CHUNK);
 		JSONObject createChunkInfo = new JSONObject();
 		createChunkInfo.put("chunk_id", chunkID);
 		createChunkInfo.put("is_rent", isRent);
-		sendJSON(out, createChunkInfo);
+		Util.sendJSON(out, createChunkInfo);
 		
 		// Receive Data
 		BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -68,42 +68,29 @@ public class SlaveCommunication {
 		return chunkInfo;
 	}
 	
-	public boolean removeChunk(int chunkID, boolean isRent) throws UnknownHostException, IOException {
+	public boolean removeChunk(int chunkID) throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
-		sendProtocol(socket.getOutputStream(), VSFProtocols.RELEASE_CHUNK);
-		boolean succeed = receiveOK(socket.getInputStream(), VSFProtocols.RELEASE_CHUNK);
+		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.RELEASE_CHUNK);
+		boolean succeed = Util.receiveOK(socket.getInputStream(), VSFProtocols.RELEASE_CHUNK);
 		socket.close();
 		return succeed;
 	}
 	
 	public boolean detectHeartBeat() throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
-		sendProtocol(socket.getOutputStream(), VSFProtocols.HEART_BEAT_DETECT_TO_SLAVE);
-		boolean succeed = receiveOK(socket.getInputStream(), VSFProtocols.RELEASE_CHUNK);
+		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.HEART_BEAT_DETECT_TO_SLAVE);
+		boolean succeed = Util.receiveOK(socket.getInputStream(), VSFProtocols.RELEASE_CHUNK);
 		socket.close();
 		return succeed;
 	}
+	
+//	private Socket connectSocket() throws SocketTimeoutException {
+//		Socket socket = new Socket();
+//		socket.connect(new InetSocketAddress(IP, port), 15000);
+//		return socket;
+//	}
+	
 
-	private void sendProtocol(OutputStream out, int protocol) throws IOException {
-		byte[] protocolBuff = new byte[8];
-		byte[] protocolBytes = (Integer.toString(protocol)).getBytes();
-		for (int i = 0; i < protocolBytes.length; ++i) {
-			protocolBuff[i] = protocolBytes[i];
-		}
-		out.write(protocolBuff, 0, protocolBuff.length);
-	}
 	
-	private void sendJSON(OutputStream out, JSONObject obj) throws IOException {
-		byte[] bytes = obj.toString().getBytes();
-		out.write(bytes, 0, bytes.length);
-	}
-	
-	private boolean receiveOK(InputStream in, int protocol) throws IOException {
-		byte[] protocolBuff = new byte[8];
-		in.read(protocolBuff, 0, 8);
-		if(Integer.parseInt(protocolBuff.toString()) == protocol)
-			return true;
-		else
-			return false;
-	}
+
 }
