@@ -6,7 +6,6 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -136,6 +135,13 @@ public class Master {
 	private boolean remove(String path, String name) throws UnknownHostException, IOException {
 		return releaseFileNode(fileHierarchy.remove(path, name));
 	}
+	
+	private ChunkInfo addChunk(String path, String name) throws UnknownHostException, IOException {
+		FileNode fileNode = fileHierarchy.openFile(path, name);
+		// TODO choose one slave
+		ChunkInfo chunkInfo = slaves.get(0).createChunk(nextChunkID++, true);
+		chunkInfoList.put(chunkInfo.chunkId, chunkInfo);
+	}
 
 	private boolean releaseFileNode(FileNode fileNode) throws UnknownHostException, IOException {
 		if (fileNode.isDir) {
@@ -186,17 +192,25 @@ public class Master {
 				// TODO read path
 				switch (protocol) {
 				case 1:
-					Util.sendJSON(out, open(path, name, mode));
+					// 1. request file handle
+					JSONObject fileHandle = open(path, name, mode);
+					if (fileHandle == null) {
+						// what to do?
+					}
+					Util.sendJSON(out, fileHandle);
 					break;
 				case 2:
+					// 2. remove file/folder?
 					if (remove(path, name))
 						Util.sendProtocol(out, protocol);
+					else
+						//?
 					break;
 				case 3:
-					// add chunk
+					// 3. add chunk? file handle?
 					break;
 				case 4:
-					// remove chunk
+					// 4. remove chunk?
 					break;
 				default:
 					break;
@@ -219,12 +233,6 @@ public class Master {
 			}
 		}));
 		while (true) {
-			// Listen to client
-			// 1. request file handle
-			// 2. remove file/folder?
-			// 3. add chunk? file handle?
-			// 4. remove chunk?
-			// Listen to slave
 			// 1. slave rent request?
 			// 2. heart beat request?
 			try (ServerSocket serverSocket = new ServerSocket(8192); // port

@@ -2,7 +2,6 @@ package vfs.master;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.Socket;
@@ -28,10 +27,10 @@ public class SlaveCommunication {
 
 	public HashMap<Integer, ChunkInfo> requestChunkInfo() throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
-		
+
 		// Send Request
 		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.INITIALIZE_CHUNK_INFO);
-		
+
 		// Receive Data
 		BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 		JSONArray chucks = new JSONArray(in.readLine());
@@ -47,9 +46,10 @@ public class SlaveCommunication {
 		return chunkInfoList;
 	}
 
-	public ChunkInfo createChunk(int chunkID, boolean isRent) throws UnknownHostException, IOException {
+	public ChunkInfo createChunk(int chunkID, boolean isRent, int indexInFile)
+			throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
-		
+
 		// Send Request
 		OutputStream out = socket.getOutputStream();
 		Util.sendProtocol(out, VSFProtocols.NEW_CHUNK);
@@ -57,17 +57,19 @@ public class SlaveCommunication {
 		createChunkInfo.put("chunk_id", chunkID);
 		createChunkInfo.put("is_rent", isRent);
 		Util.sendJSON(out, createChunkInfo);
-		
-		// Receive Data
-		BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-		JSONObject chunk = new JSONObject(in.readLine());
-		socket.close();
 
-		ChunkInfo chunkInfo = new ChunkInfo(chunk.getInt("chunk_id"), chunk.getString("slave_ip"), chunk.getInt("port"),
-				chunk.getInt("file_index"), chunk.getInt("chunk_left"));
-		return chunkInfo;
+		// Receive Data
+		boolean succeed = Util.receiveOK(socket.getInputStream(), VSFProtocols.NEW_CHUNK);
+		socket.close();
+		if (succeed) {
+			ChunkInfo chunkInfo = new ChunkInfo(chunkID, IP, port, indexInFile, 0);
+			return chunkInfo;
+		} else {
+			return null;
+		}
+
 	}
-	
+
 	public boolean removeChunk(int chunkID) throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
 		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.RELEASE_CHUNK);
@@ -75,7 +77,7 @@ public class SlaveCommunication {
 		socket.close();
 		return succeed;
 	}
-	
+
 	public boolean detectHeartBeat() throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
 		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.HEART_BEAT_DETECT_TO_SLAVE);
@@ -83,14 +85,11 @@ public class SlaveCommunication {
 		socket.close();
 		return succeed;
 	}
-	
-//	private Socket connectSocket() throws SocketTimeoutException {
-//		Socket socket = new Socket();
-//		socket.connect(new InetSocketAddress(IP, port), 15000);
-//		return socket;
-//	}
-	
 
-	
+	// private Socket connectSocket() throws SocketTimeoutException {
+	// Socket socket = new Socket();
+	// socket.connect(new InetSocketAddress(IP, port), 15000);
+	// return socket;
+	// }
 
 }

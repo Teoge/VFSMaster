@@ -1,8 +1,5 @@
 package vfs.master;
 
-import java.io.IOException;
-import java.net.UnknownHostException;
-
 import org.json.JSONObject;
 
 import vfs.struct.FileNode;
@@ -62,7 +59,7 @@ public class FileHierarchy {
 		}
 		return fileNode;
 	}
-	
+
 	public FileNode remove(String path, String dirName) {
 		FileNode fileNode = pathToFileNode(path);
 		if (fileNode == null)
