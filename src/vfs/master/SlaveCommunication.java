@@ -6,6 +6,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.HashMap;
 
 import org.json.JSONArray;
@@ -22,6 +23,22 @@ public class SlaveCommunication {
 	public SlaveCommunication(String iP, int port) {
 		super();
 		IP = iP;
+		this.port = port;
+	}
+
+	public String getIP() {
+		return IP;
+	}
+
+	public void setIP(String iP) {
+		IP = iP;
+	}
+
+	public int getPort() {
+		return port;
+	}
+
+	public void setPort(int port) {
 		this.port = port;
 	}
 
@@ -46,7 +63,7 @@ public class SlaveCommunication {
 		return chunkInfoList;
 	}
 
-	public ChunkInfo createChunk(int chunkID, boolean isRent, int indexInFile)
+	public void createChunk(int chunkID, boolean isRent, ArrayList<Integer> copyIDs)
 			throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
 
@@ -56,18 +73,20 @@ public class SlaveCommunication {
 		JSONObject createChunkInfo = new JSONObject();
 		createChunkInfo.put("chunk_id", chunkID);
 		createChunkInfo.put("is_rent", isRent);
+		JSONArray idsOfCopies = new JSONArray();
+		if (copyIDs != null) {
+			for (int id : copyIDs) {
+				idsOfCopies.put(id);
+			}
+		}
+		createChunkInfo.put("ids_of_copies", idsOfCopies);
 		Util.sendJSON(out, createChunkInfo);
 
 		// Receive Data
 		boolean succeed = Util.receiveOK(socket.getInputStream(), VSFProtocols.NEW_CHUNK);
 		socket.close();
-		if (succeed) {
-			ChunkInfo chunkInfo = new ChunkInfo(chunkID, IP, port, indexInFile, 0);
-			return chunkInfo;
-		} else {
-			return null;
-		}
-
+		if (!succeed)
+			throw new IOException();
 	}
 
 	public boolean removeChunk(int chunkID) throws UnknownHostException, IOException {

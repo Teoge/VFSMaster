@@ -24,14 +24,18 @@ public class Master {
 
 	FileHierarchy fileHierarchy;
 
-	private int nextFileHandleID;
-	private int nextChunkID;
+	private int nextFileHandleId;
+	private int nextChunkId;
 
 	private ArrayList<SlaveCommunication> slaves;
 
 	private HashMap<Integer, ChunkInfo> chunkInfoList;
 
+	private HashMap<Integer, ArrayList<Integer>> mainChunkList;
+
 	private static String serializedJSONFileName = "configuration.json";
+
+	private static int numOfCopies = 3;
 
 	public Master() {
 		readFromJSONFile();
@@ -61,8 +65,8 @@ public class Master {
 
 			JSONObject config = new JSONObject(sb.toString());
 			fileHierarchy = new FileHierarchy(config.getJSONObject("file_hierarchy"));
-			nextFileHandleID = config.getInt("next_file_handle_id");
-			nextChunkID = config.getInt("next_chunk_id");
+			nextFileHandleId = config.getInt("next_file_handle_id");
+			nextChunkId = config.getInt("next_chunk_id");
 			JSONArray slavesArray = config.getJSONArray("slaves");
 			slaves = new ArrayList<SlaveCommunication>();
 			for (int i = 0; i < slavesArray.length(); i++) {
@@ -72,8 +76,8 @@ public class Master {
 			}
 		} catch (FileNotFoundException | JSONException e) {
 			fileHierarchy = new FileHierarchy();
-			nextFileHandleID = 0;
-			nextChunkID = 0;
+			nextFileHandleId = 0;
+			nextChunkId = 0;
 			slaves = new ArrayList<SlaveCommunication>();
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -82,8 +86,8 @@ public class Master {
 
 	private void saveToJSONFile() {
 		JSONObject config = new JSONObject();
-		config.put("next_file_handle_id", nextFileHandleID);
-		config.put("next_chunk_id", nextChunkID);
+		config.put("next_file_handle_id", nextFileHandleId);
+		config.put("next_chunk_id", nextChunkId);
 		config.put("file_hierarchy", fileHierarchy.toJSON());
 		JSONArray slavesArray = new JSONArray();
 		for (SlaveCommunication slave : slaves) {
@@ -108,7 +112,7 @@ public class Master {
 			return null;
 
 		JSONObject handle = new JSONObject();
-		handle.put("handle", nextFileHandleID++);
+		handle.put("handle", nextFileHandleId++);
 		handle.put("offset", 0);
 		handle.put("mode", -1);
 		JSONObject fileInfo = new JSONObject();
@@ -118,9 +122,9 @@ public class Master {
 		handle.put("fileInfo", fileInfo);
 
 		JSONArray chunkList = new JSONArray();
-		for (Integer chunkID : fileNode.chunkIDList) {
+		for (Integer chunkId : fileNode.chunkIDList) {
 			JSONObject chunk = new JSONObject();
-			ChunkInfo chunkInfo = chunkInfoList.get(chunkID);
+			ChunkInfo chunkInfo = chunkInfoList.get(chunkId);
 			chunk.put("chunkId", chunkInfo.chunkId);
 			chunk.put("slaveIP", chunkInfo.slaveIP);
 			chunk.put("port", chunkInfo.port);
@@ -131,16 +135,59 @@ public class Master {
 		handle.put("chunkList", chunkList);
 		return handle;
 	}
+	
+	
 
 	private boolean remove(String path, String name) throws UnknownHostException, IOException {
 		return releaseFileNode(fileHierarchy.remove(path, name));
 	}
-	
-	private ChunkInfo addChunk(String path, String name) throws UnknownHostException, IOException {
+
+	private JSONArray addChunk(String path, String name) throws UnknownHostException, IOException {
 		FileNode fileNode = fileHierarchy.openFile(path, name);
-		// TODO choose one slave
-		ChunkInfo chunkInfo = slaves.get(0).createChunk(nextChunkID++, true);
-		chunkInfoList.put(chunkInfo.chunkId, chunkInfo);
+		ArrayList<ChunkInfo> tempChunkInfoList = createChunk(fileNode.getChunkSize());
+		if (tempChunkInfoList == null)
+			return null;
+		ChunkInfo chunkInfo = null;
+		for (int i = 0; i < tempChunkInfoList.size(); i++) {
+			chunkInfo = tempChunkInfoList.get(i);
+			chunkInfoList.put(chunkInfo.chunkId, chunkInfo);
+		}
+		fileNode.addChunk(chunkInfo.chunkId);
+		JSONArray chunkList = new JSONArray();
+		for (Integer chunkId : fileNode.chunkIDList) {
+			JSONObject chunk = new JSONObject();
+			chunkInfo = chunkInfoList.get(chunkId);
+			chunk.put("chunkId", chunkInfo.chunkId);
+			chunk.put("slaveIP", chunkInfo.slaveIP);
+			chunk.put("port", chunkInfo.port);
+			chunk.put("fileIndex", chunkInfo.fileIndex);
+			chunk.put("chunkLeft", chunkInfo.chunkLeft);
+			chunkList.put(chunk);
+		}
+		return chunkList;
+	}
+
+	private ArrayList<ChunkInfo> createChunk(int chunkIndexInFile) {
+		ArrayList<Integer> chunkIdList = new ArrayList<Integer>();
+		ArrayList<ChunkInfo> tempChunkInfoList = new ArrayList<ChunkInfo>();
+		int originalNextChunkId = nextChunkId;
+		for (int i = 0; i < numOfCopies; i++) {
+			SlaveCommunication slave = slaves.get(i);// TODO choose a slave
+			int currentId = nextChunkId++;
+			try {
+				if (i == numOfCopies - 1)
+					slave.createChunk(currentId, true, chunkIdList);
+				else
+					slave.createChunk(currentId, false, null);
+				tempChunkInfoList
+						.add(new ChunkInfo(currentId, slave.getIP(), slaves.get(i).getPort(), chunkIndexInFile, 0));
+				chunkIdList.add(currentId);
+			} catch (IOException e) {
+				nextChunkId = originalNextChunkId;
+				return null;
+			}
+		}
+		return null;
 	}
 
 	private boolean releaseFileNode(FileNode fileNode) throws UnknownHostException, IOException {
@@ -148,11 +195,11 @@ public class Master {
 			if (fileNode.child != null)
 				releaseFileNode(fileNode.child);
 		} else {
-			for (int chunkID : fileNode.chunkIDList) {
-				SlaveCommunication slave = findSlaveWithIP(chunkInfoList.get(chunkID).slaveIP);
+			for (int chunkId : fileNode.chunkIDList) {
+				SlaveCommunication slave = findSlaveWithIP(chunkInfoList.get(chunkId).slaveIP);
 				if (slave == null)
 					continue;
-				if (!slave.removeChunk(chunkID))
+				if (!slave.removeChunk(chunkId))
 					return false;
 			}
 		}
@@ -204,10 +251,15 @@ public class Master {
 					if (remove(path, name))
 						Util.sendProtocol(out, protocol);
 					else
-						//?
+						// ?
 					break;
 				case 3:
 					// 3. add chunk? file handle?
+					JSONArray array = addChunk(path, name);
+					if(array!=null)
+						Util.sendJSON(out, array);
+					else
+						// ?
 					break;
 				case 4:
 					// 4. remove chunk?
