@@ -271,17 +271,19 @@ public class Master {
 				case VSFProtocols.OPEN_FILE:
 					// 1. request file handle
 					JSONObject fileHandle = open(path, name);
-					if (fileHandle == null) {
-						// what to do?
+					if (fileHandle != null) {
+						Util.sendString(out, VSFProtocols.MESSAGE_OK);
+						Util.sendJSON(out, fileHandle);
+					} else {
+						Util.sendString(out, VSFProtocols.MASTER_REJECT);
 					}
-					Util.sendJSON(out, fileHandle);
 					break;
 				case VSFProtocols.REMOVE_FILE:
 					// 2. remove file/folder?
 					if (remove(path, name))
-						Util.sendProtocol(out, protocol);
-					// else
-					// ?
+						Util.sendString(out, VSFProtocols.MESSAGE_OK);
+					else
+						Util.sendString(out, VSFProtocols.MASTER_REJECT);
 					break;
 				case VSFProtocols.ADD_CHUNK:
 					int chunkSize = Util.receiveInt(in);
@@ -289,18 +291,25 @@ public class Master {
 					for (int i = 0; i < chunkSize; i++) {
 						array = addChunk(path, name);
 					}
-					if (array != null)
+					if (array != null) {
+						Util.sendString(out, VSFProtocols.MESSAGE_OK);
 						Util.sendJSON(out, array);
-					// else
-					// ?
+					} else {
+						Util.sendString(out, VSFProtocols.MASTER_REJECT);
+					}
 					break;
 				case VSFProtocols.MK_DIR:
-					fileHierarchy.mkdir(path, name);
+					if (fileHierarchy.mkdir(path, name)) {
+						Util.sendString(out, VSFProtocols.MESSAGE_OK);
+					} else {
+						Util.sendString(out, VSFProtocols.MASTER_REJECT);
+					}
 					break;
 				case VSFProtocols.RESIZE_FILE:
 
 					break;
 				case VSFProtocols.GET_FILE_NODE:
+					Util.sendString(out, VSFProtocols.MESSAGE_OK);
 					Util.sendJSON(out, fileHierarchy.toJSON());
 					break;
 				default:
@@ -332,7 +341,16 @@ public class Master {
 			byte[] protocolBuff = new byte[8];
 			while (true) {
 				in.read(protocolBuff, 0, 8);
-				int protocol = Integer.parseInt(protocolBuff.toString());
+				
+				int ends = 0;
+                for(int i = 0; i < protocolBuff.length; ++i){
+                    if(protocolBuff[i]=='\0'){
+                        ends = i;
+                        break;
+                    }
+                }
+                
+				int protocol = Integer.parseInt(new String(protocolBuff, 0, ends));
 				ClientWorker clientWorker = master.new ClientWorker(protocol, in, out);
 				clientWorker.start();
 			}

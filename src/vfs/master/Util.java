@@ -9,6 +9,8 @@ import java.io.OutputStream;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import vfs.struct.VSFProtocols;
+
 public class Util {
 
 	public static void sendProtocol(OutputStream out, int protocol) throws IOException {
@@ -45,6 +47,11 @@ public class Util {
 	public static int receiveInt(InputStream in) throws IOException {
 		DataInputStream input = new DataInputStream(in);
 		return input.readInt();
+	}
+	
+	public static void sendString(OutputStream out, String str) throws IOException {
+		DataOutputStream output = new DataOutputStream(out);
+		output.writeUTF(str);
 	}
 	
 	public static boolean receiveOK(InputStream in, int protocol) throws IOException {
