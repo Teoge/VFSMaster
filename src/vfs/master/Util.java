@@ -1,5 +1,7 @@
 package vfs.master;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -19,13 +21,30 @@ public class Util {
 	}
 	
 	public static void sendJSON(OutputStream out, JSONObject obj) throws IOException {
+		DataOutputStream output = new DataOutputStream(out);
 		byte[] bytes = obj.toString().getBytes();
-		out.write(bytes, 0, bytes.length);
+		output.writeInt(bytes.length);
+		output.write(bytes, 0, bytes.length);
 	}
 	
 	public static void sendJSON(OutputStream out, JSONArray array) throws IOException {
+		DataOutputStream output = new DataOutputStream(out);
 		byte[] bytes = array.toString().getBytes();
-		out.write(bytes, 0, bytes.length);
+		output.writeInt(bytes.length);
+		output.write(bytes, 0, bytes.length);
+	}
+	
+	public static String receiveString(InputStream in) throws IOException {
+		DataInputStream input = new DataInputStream(in);
+		int length = input.readInt();
+    	byte[] bytes = new byte[length];
+    	readBytes(input, bytes, length);
+    	return bytes.toString();
+	}
+	
+	public static int receiveInt(InputStream in) throws IOException {
+		DataInputStream input = new DataInputStream(in);
+		return input.readInt();
 	}
 	
 	public static boolean receiveOK(InputStream in, int protocol) throws IOException {
@@ -35,6 +54,13 @@ public class Util {
 			return true;
 		else
 			return false;
+	}
+	
+	private static void readBytes(DataInputStream in, byte[] buf, int len) throws IOException{
+		int b = 0;
+		while(b < len){
+			b += in.read(buf, b, len-b);
+		}
 	}
 	
 }
