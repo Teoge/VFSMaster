@@ -23,7 +23,7 @@ import vfs.struct.FileNode;
 
 public class Master {
 
-	private FileNode root;
+	FileHierarchy fileHierarchy;
 
 	private int nextFileHandleID;
 	private int nextChunkID;
@@ -61,8 +61,7 @@ public class Master {
 			br.close();
 
 			JSONObject config = new JSONObject(sb.toString());
-			root = new FileNode();
-			root.parseJSON(config.getJSONObject("file_hierarchy"), null);
+			fileHierarchy = new FileHierarchy(config.getJSONObject("file_hierarchy"));
 			nextFileHandleID = config.getInt("next_file_handle_id");
 			nextChunkID = config.getInt("next_chunk_id");
 			JSONArray slavesArray = config.getJSONArray("slaves");
@@ -73,7 +72,7 @@ public class Master {
 				slaves.add(slave);
 			}
 		} catch (FileNotFoundException | JSONException e) {
-			root = new FileNode("vfs", true, null);
+			fileHierarchy = new FileHierarchy();
 			nextFileHandleID = 0;
 			nextChunkID = 0;
 			slaves = new ArrayList<SlaveCommunication>();
@@ -86,7 +85,7 @@ public class Master {
 		JSONObject config = new JSONObject();
 		config.put("next_file_handle_id", nextFileHandleID);
 		config.put("next_chunk_id", nextChunkID);
-		config.put("file_hierarchy", root.toJSON());
+		config.put("file_hierarchy", fileHierarchy.toJSON());
 		JSONArray slavesArray = new JSONArray();
 		for (SlaveCommunication slave : slaves) {
 			JSONObject obj = new JSONObject();
@@ -104,70 +103,10 @@ public class Master {
 		}
 	}
 
-	private boolean mkdir(String path, String dirName) {
-		FileNode fileNode = pathToFileNode(path);
-		if (fileNode == null || !checkFileName(dirName))
-			return false;
-		if (!fileNode.isDir)
-			return false;
-		FileNode parent = fileNode;
-		fileNode = fileNode.child;
-		while (fileNode != null) {
-			if (fileNode.fileName.equals(dirName))
-				return false;
-			fileNode = fileNode.brother;
-		}
-		fileNode = new FileNode(dirName, true, parent);
-		return true;
-	}
-
-	private boolean remove(String path, String dirName) throws UnknownHostException, IOException {
-		FileNode fileNode = pathToFileNode(path);
-		if (fileNode == null)
-			return false;
-		FileNode parent = fileNode;
-		fileNode = parent.child;
-		if (fileNode != null) {
-			if (fileNode.fileName.equals(dirName)) {
-				parent.child = fileNode.brother;
-				fileNode.brother = null;
-				return releaseFileNode(fileNode);
-			}
-		} else {
-			return false;
-		}
-		FileNode bigBrother;
-		do {
-			if (fileNode.brother == null)
-				return false;
-			bigBrother = fileNode;
-			fileNode = fileNode.brother;
-		} while (fileNode.fileName != dirName);
-		bigBrother.brother = fileNode.brother;
-		fileNode.brother = null;
-		return releaseFileNode(fileNode);
-	}
-
 	private JSONObject open(String path, String name, String mode) {
-		FileNode parent = pathToFileNode(path);
-		if (parent == null)
+		FileNode fileNode = fileHierarchy.openFile(path, name);
+		if (fileNode == null)
 			return null;
-		FileNode fileNode = parent.findChildWithName(name);
-
-		// if not exist, create a new file
-		if (fileNode == null) {
-			if (parent.child == null) {
-				parent.child = new FileNode(name, false, parent);
-				fileNode = parent.child;
-			} else {
-				fileNode = parent.child;
-				while (fileNode.brother != null) {
-					fileNode = fileNode.brother;
-				}
-				fileNode.brother = new FileNode(name, false, parent);
-				fileNode = fileNode.brother;
-			}
-		}
 
 		JSONObject handle = new JSONObject();
 		handle.put("handle", nextFileHandleID++);
@@ -194,14 +133,8 @@ public class Master {
 		return handle;
 	}
 
-	private boolean checkFileName(String name) {
-		if (name.contains("/") || name.contains("\\\\") || name.contains(":") || name.contains("*")
-				|| name.contains("?") || name.contains("\"") || name.contains("<") || name.contains(">")
-				|| name.contains("|")) {
-			return false;
-		} else {
-			return true;
-		}
+	private boolean remove(String path, String name) throws UnknownHostException, IOException {
+		return releaseFileNode(fileHierarchy.remove(path, name));
 	}
 
 	private boolean releaseFileNode(FileNode fileNode) throws UnknownHostException, IOException {
@@ -229,17 +162,6 @@ public class Master {
 			}
 		}
 		return null;
-	}
-
-	private FileNode pathToFileNode(String path) {
-		String[] names = path.split("[/\\\\]");
-		FileNode fileNode = root;
-		for (int i = 1; i < names.length; i++) {
-			fileNode = fileNode.findChildWithName(names[i]);
-			if (fileNode == null)
-				return null;
-		}
-		return fileNode;
 	}
 
 	public class ClientWorker extends Thread {
@@ -305,7 +227,7 @@ public class Master {
 			// Listen to slave
 			// 1. slave rent request?
 			// 2. heart beat request?
-			try (ServerSocket serverSocket = new ServerSocket(8192);// port
+			try (ServerSocket serverSocket = new ServerSocket(8192); // port
 					Socket clientSocket = serverSocket.accept();
 					OutputStream out = clientSocket.getOutputStream();
 					InputStream in = clientSocket.getInputStream();) {
