@@ -334,14 +334,14 @@ public class Master {
 		}));
 		// 1. slave rent request?
 		// 2. heart beat request?
-		try (ServerSocket serverSocket = new ServerSocket(8192); // port
-				Socket clientSocket = serverSocket.accept();
-				OutputStream out = clientSocket.getOutputStream();
-				InputStream in = clientSocket.getInputStream();) {
+		try {
+			ServerSocket serverSocket = new ServerSocket(8192); // port
 			byte[] protocolBuff = new byte[8];
 			while (true) {
+				Socket clientSocket = serverSocket.accept();
+				OutputStream out = clientSocket.getOutputStream();
+				InputStream in = clientSocket.getInputStream();
 				in.read(protocolBuff, 0, 8);
-				
 				int ends = 0;
                 for(int i = 0; i < protocolBuff.length; ++i){
                     if(protocolBuff[i]=='\0'){
@@ -349,7 +349,6 @@ public class Master {
                         break;
                     }
                 }
-                
 				int protocol = Integer.parseInt(new String(protocolBuff, 0, ends));
 				ClientWorker clientWorker = master.new ClientWorker(protocol, in, out);
 				clientWorker.start();
