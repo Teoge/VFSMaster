@@ -43,7 +43,7 @@ public class Master {
 
 	public Master() {
 		readFromJSONFile();
-//		chunkInfoList = new HashMap<Integer, ChunkInfo>();
+		chunkInfoList = new HashMap<Integer, ChunkInfo>();
 //		for (SlaveCommunication slave : slaves) {
 //			try {
 //				chunkInfoList.putAll(slave.requestChunkInfo());
@@ -144,12 +144,14 @@ public class Master {
 		for (Integer chunkId : fileNode.chunkIDList) {
 			JSONObject chunk = new JSONObject();
 			ChunkInfo chunkInfo = chunkInfoList.get(chunkId);
-			chunk.put("chunkId", chunkInfo.chunkId);
-			chunk.put("slaveIP", chunkInfo.slaveIP);
-			chunk.put("port", chunkInfo.port);
-			chunk.put("fileIndex", chunkInfo.fileIndex);
-			chunk.put("chunkLeft", chunkInfo.chunkLeft);
-			chunkList.put(chunk);
+			if (chunkInfo != null){
+				chunk.put("chunkId", chunkInfo.chunkId);
+				chunk.put("slaveIP", chunkInfo.slaveIP);
+				chunk.put("port", chunkInfo.port);
+				chunk.put("fileIndex", chunkInfo.fileIndex);
+				chunk.put("chunkLeft", chunkInfo.chunkLeft);
+				chunkList.put(chunk);
+			}
 		}
 		handle.put("chunkList", chunkList);
 		return handle;
@@ -225,13 +227,16 @@ public class Master {
 	private boolean eraseChunk(int mainChunkId) throws UnknownHostException, IOException {
 		ArrayList<Integer> chunkIds = mainCopyLookup.get(mainChunkId);
 		for (int chunkId : chunkIds) {
-			SlaveCommunication slave = findSlaveWithIP(chunkInfoList.get(chunkId).slaveIP);
-			if (slave == null)
-				return false;
-			if (!slave.removeChunk(chunkId))
-				return false;
-			else {
-				chunkInfoList.remove(chunkId);
+			ChunkInfo chunkInfo =  chunkInfoList.get(chunkId);
+			if(chunkInfo != null){
+				SlaveCommunication slave = findSlaveWithIP(chunkInfo.slaveIP);
+				if (slave == null)
+					return false;  // TODO if there is no slave, continue erasing
+				if (!slave.removeChunk(chunkId))
+					return false;
+				else {
+					chunkInfoList.remove(chunkId);
+				}
 			}
 		}
 		mainCopyLookup.remove(mainChunkId);

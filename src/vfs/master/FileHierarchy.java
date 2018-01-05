@@ -28,13 +28,18 @@ public class FileHierarchy {
 		if (!fileNode.isDir)
 			return false;
 		FileNode parent = fileNode;
+		if (fileNode.child == null){
+			parent.child = new FileNode(dirName, true, parent);
+			return true;
+		}
+		
 		fileNode = fileNode.child;
-		while (fileNode != null) {
+		while (fileNode.brother != null) {
 			if (fileNode.fileName.equals(dirName))
 				return false;
 			fileNode = fileNode.brother;
 		}
-		fileNode = new FileNode(dirName, true, parent);
+		fileNode.brother = new FileNode(dirName, true, parent);
 		return true;
 	}
 
@@ -59,6 +64,10 @@ public class FileHierarchy {
 		}
 		return fileNode;
 	}
+	
+	public FileNode OpenDir(String path) {
+		return pathToFileNode(path);
+	}
 
 	public FileNode remove(String path, String dirName) {
 		FileNode fileNode = pathToFileNode(path);
@@ -77,11 +86,14 @@ public class FileHierarchy {
 		}
 		FileNode bigBrother;
 		do {
-			if (fileNode.brother == null)
+			if (fileNode == null){
 				return null;
+			}
+//			if (fileNode.brother == null)
+//				return null;
 			bigBrother = fileNode;
 			fileNode = fileNode.brother;
-		} while (fileNode.fileName != dirName);
+		} while (!fileNode.fileName.equals(dirName));
 		bigBrother.brother = fileNode.brother;
 		fileNode.brother = null;
 		return fileNode;
