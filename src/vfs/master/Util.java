@@ -9,8 +9,6 @@ import java.io.OutputStream;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import vfs.struct.VSFProtocols;
-
 public class Util {
 
 	public static void sendProtocol(OutputStream out, int protocol) throws IOException {

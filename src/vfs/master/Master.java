@@ -43,16 +43,16 @@ public class Master {
 
 	public Master() {
 		readFromJSONFile();
-		chunkInfoList = new HashMap<Integer, ChunkInfo>();
-		for (SlaveCommunication slave : slaves) {
-			try {
-				chunkInfoList.putAll(slave.requestChunkInfo());
-			} catch (UnknownHostException e) {
-				// TODO
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
+//		chunkInfoList = new HashMap<Integer, ChunkInfo>();
+//		for (SlaveCommunication slave : slaves) {
+//			try {
+//				chunkInfoList.putAll(slave.requestChunkInfo());
+//			} catch (UnknownHostException e) {
+//				// TODO
+//			} catch (IOException e) {
+//				e.printStackTrace();
+//			}
+//		}
 	}
 
 	private void readFromJSONFile() {
@@ -257,9 +257,9 @@ public class Master {
 		public ClientWorker(Socket socket) throws IOException {
 			super();
 			this.socket = socket;
-			protocol = Util.receiveProtocol(in);
 			out = socket.getOutputStream();
 			in = socket.getInputStream();
+			protocol = Util.receiveProtocol(in);
 		}
 
 		@Override
@@ -341,7 +341,7 @@ public class Master {
 		// 1. slave rent request?
 		// 2. heart beat request?
 		try {
-			ServerSocket serverSocket = new ServerSocket(8192); // port
+			ServerSocket serverSocket = new ServerSocket(8877); // port
 			while (true) {
 				Socket clientSocket = serverSocket.accept();
 				ClientWorker clientWorker = master.new ClientWorker(clientSocket);
