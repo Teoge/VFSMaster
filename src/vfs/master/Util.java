@@ -62,7 +62,7 @@ public class Util {
 		return input.readInt();
 	}
 	
-	public static void sendString(OutputStream out, String str) throws IOException {
+	public static void sendSignal(OutputStream out, String str) throws IOException {
 		DataOutputStream output = new DataOutputStream(out);
 		output.writeUTF(str);
 	}

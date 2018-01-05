@@ -283,10 +283,10 @@ public class Master {
 					name = fullPath.substring(delimeter + 1);
 					JSONObject fileHandle = open(path, name);
 					if (fileHandle != null) {
-						Util.sendString(out, VSFProtocols.MESSAGE_OK);
+						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 						Util.sendJSON(out, fileHandle);
 					} else {
-						Util.sendString(out, VSFProtocols.MASTER_REJECT);
+						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
 					}
 					break;
 				case VSFProtocols.REMOVE_FILE:
@@ -296,9 +296,9 @@ public class Master {
 					path = fullPath.substring(0, delimeter);
 					name = fullPath.substring(delimeter + 1);
 					if (remove(path, name))
-						Util.sendString(out, VSFProtocols.MESSAGE_OK);
+						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 					else
-						Util.sendString(out, VSFProtocols.MASTER_REJECT);
+						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
 					break;
 				case VSFProtocols.ADD_CHUNK:
 					fullPath = Util.receiveString(in);
@@ -311,10 +311,10 @@ public class Master {
 						array = addChunk(path, name);
 					}
 					if (array != null) {
-						Util.sendString(out, VSFProtocols.MESSAGE_OK);
+						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 						Util.sendJSON(out, array);
 					} else {
-						Util.sendString(out, VSFProtocols.MASTER_REJECT);
+						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
 					}
 					break;
 				case VSFProtocols.MK_DIR:
@@ -323,13 +323,13 @@ public class Master {
 					path = fullPath.substring(0, delimeter);
 					name = fullPath.substring(delimeter + 1);
 					if (fileHierarchy.mkdir(path, name)) {
-						Util.sendString(out, VSFProtocols.MESSAGE_OK);
+						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 					} else {
-						Util.sendString(out, VSFProtocols.MASTER_REJECT);
+						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
 					}
 					break;
 				case VSFProtocols.GET_FILE_NODE:
-					Util.sendString(out, VSFProtocols.MESSAGE_OK);
+					Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 					Util.sendJSON(out, fileHierarchy.toJSON());
 					break;
 				default:

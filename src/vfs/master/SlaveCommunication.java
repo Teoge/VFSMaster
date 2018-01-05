@@ -83,7 +83,7 @@ public class SlaveCommunication {
 		Util.sendJSON(out, createChunkInfo);
 
 		// Receive Data
-		boolean succeed = Util.receiveOK(socket.getInputStream(), VSFProtocols.NEW_CHUNK);
+		boolean succeed = Util.receiveOK(socket.getInputStream());
 		socket.close();
 		if (!succeed)
 			throw new IOException();
@@ -92,7 +92,7 @@ public class SlaveCommunication {
 	public boolean removeChunk(int chunkID) throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
 		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.RELEASE_CHUNK);
-		boolean succeed = Util.receiveOK(socket.getInputStream(), VSFProtocols.RELEASE_CHUNK);
+		boolean succeed = Util.receiveOK(socket.getInputStream());
 		socket.close();
 		return succeed;
 	}
@@ -100,7 +100,7 @@ public class SlaveCommunication {
 	public boolean detectHeartBeat() throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
 		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.HEART_BEAT_DETECT_TO_SLAVE);
-		boolean succeed = Util.receiveOK(socket.getInputStream(), VSFProtocols.RELEASE_CHUNK);
+		boolean succeed = Util.receiveOK(socket.getInputStream());
 		socket.close();
 		return succeed;
 	}
