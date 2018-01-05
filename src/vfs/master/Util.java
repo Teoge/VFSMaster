@@ -9,6 +9,8 @@ import java.io.OutputStream;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import vfs.struct.VSFProtocols;
+
 public class Util {
 
 	public static void sendProtocol(OutputStream out, int protocol) throws IOException {
@@ -65,10 +67,10 @@ public class Util {
 		output.writeUTF(str);
 	}
 	
-	public static boolean receiveOK(InputStream in, int protocol) throws IOException {
-		byte[] protocolBuff = new byte[8];
-		in.read(protocolBuff, 0, 8);
-		if(Integer.parseInt(new String(protocolBuff)) == protocol)
+	public static boolean receiveOK(InputStream in) throws IOException {
+		DataInputStream input = new DataInputStream(in);
+		String reply = input.readUTF();
+		if(reply.equals(VSFProtocols.MESSAGE_OK))
 			return true;
 		else
 			return false;
