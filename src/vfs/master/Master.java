@@ -250,26 +250,32 @@ public class Master {
 	public class ClientWorker extends Thread {
 
 		int protocol;
+		Socket socket;
 		InputStream in;
 		OutputStream out;
 
-		public ClientWorker(int protocol, InputStream in, OutputStream out) {
+		public ClientWorker(Socket socket) throws IOException {
 			super();
-			this.protocol = protocol;
-			this.in = in;
-			this.out = out;
+			this.socket = socket;
+			protocol = Util.receiveProtocol(in);
+			out = socket.getOutputStream();
+			in = socket.getInputStream();
 		}
 
 		@Override
 		public void run() {
 			try {
-				String fullPath = Util.receiveString(in);
-				int delimeter = fullPath.lastIndexOf("/");
-				String path = fullPath.substring(0, delimeter);
-				String name = fullPath.substring(delimeter + 1);
+				String fullPath = null;
+				int delimeter = 0;
+				String path = null;
+				String name = null;
 				switch (protocol) {
 				case VSFProtocols.OPEN_FILE:
 					// 1. request file handle
+					fullPath = Util.receiveString(in);
+					delimeter = fullPath.lastIndexOf("/");
+					path = fullPath.substring(0, delimeter);
+					name = fullPath.substring(delimeter + 1);
 					JSONObject fileHandle = open(path, name);
 					if (fileHandle != null) {
 						Util.sendString(out, VSFProtocols.MESSAGE_OK);
@@ -280,12 +286,20 @@ public class Master {
 					break;
 				case VSFProtocols.REMOVE_FILE:
 					// 2. remove file/folder?
+					fullPath = Util.receiveString(in);
+					delimeter = fullPath.lastIndexOf("/");
+					path = fullPath.substring(0, delimeter);
+					name = fullPath.substring(delimeter + 1);
 					if (remove(path, name))
 						Util.sendString(out, VSFProtocols.MESSAGE_OK);
 					else
 						Util.sendString(out, VSFProtocols.MASTER_REJECT);
 					break;
 				case VSFProtocols.ADD_CHUNK:
+					fullPath = Util.receiveString(in);
+					delimeter = fullPath.lastIndexOf("/");
+					path = fullPath.substring(0, delimeter);
+					name = fullPath.substring(delimeter + 1);
 					int chunkSize = Util.receiveInt(in);
 					JSONArray array = null;
 					for (int i = 0; i < chunkSize; i++) {
@@ -299,14 +313,15 @@ public class Master {
 					}
 					break;
 				case VSFProtocols.MK_DIR:
+					fullPath = Util.receiveString(in);
+					delimeter = fullPath.lastIndexOf("/");
+					path = fullPath.substring(0, delimeter);
+					name = fullPath.substring(delimeter + 1);
 					if (fileHierarchy.mkdir(path, name)) {
 						Util.sendString(out, VSFProtocols.MESSAGE_OK);
 					} else {
 						Util.sendString(out, VSFProtocols.MASTER_REJECT);
 					}
-					break;
-				case VSFProtocols.RESIZE_FILE:
-
 					break;
 				case VSFProtocols.GET_FILE_NODE:
 					Util.sendString(out, VSFProtocols.MESSAGE_OK);
@@ -323,6 +338,19 @@ public class Master {
 
 	public static void main(String[] args) {
 		Master master = new Master();
+		// 1. slave rent request?
+		// 2. heart beat request?
+		try {
+			ServerSocket serverSocket = new ServerSocket(8192); // port
+			while (true) {
+				Socket clientSocket = serverSocket.accept();
+				ClientWorker clientWorker = master.new ClientWorker(clientSocket);
+				clientWorker.start();
+			}
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
 		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
 			@Override
@@ -332,31 +360,6 @@ public class Master {
 				master.saveToJSONFile();
 			}
 		}));
-		// 1. slave rent request?
-		// 2. heart beat request?
-		try {
-			ServerSocket serverSocket = new ServerSocket(8192); // port
-			byte[] protocolBuff = new byte[8];
-			while (true) {
-				Socket clientSocket = serverSocket.accept();
-				OutputStream out = clientSocket.getOutputStream();
-				InputStream in = clientSocket.getInputStream();
-				in.read(protocolBuff, 0, 8);
-				int ends = 0;
-                for(int i = 0; i < protocolBuff.length; ++i){
-                    if(protocolBuff[i]=='\0'){
-                        ends = i;
-                        break;
-                    }
-                }
-				int protocol = Integer.parseInt(new String(protocolBuff, 0, ends));
-				ClientWorker clientWorker = master.new ClientWorker(protocol, in, out);
-				clientWorker.start();
-			}
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 	}
 
 }

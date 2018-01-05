@@ -22,6 +22,19 @@ public class Util {
 		out.write(protocolBuff, 0, protocolBuff.length);
 	}
 	
+	public static int receiveProtocol(InputStream in) throws IOException {
+		byte[] protocolBuff = new byte[8];
+		in.read(protocolBuff, 0, 8);
+		int ends = 0;
+		for (int i = 0; i < protocolBuff.length; ++i) {
+			if (protocolBuff[i] == '\0') {
+				ends = i;
+				break;
+			}
+		}
+		return Integer.parseInt(new String(protocolBuff, 0, ends));
+	}
+	
 	public static void sendJSON(OutputStream out, JSONObject obj) throws IOException {
 		DataOutputStream output = new DataOutputStream(out);
 		byte[] bytes = obj.toString().getBytes();
