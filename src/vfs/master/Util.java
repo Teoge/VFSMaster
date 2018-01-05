@@ -52,7 +52,7 @@ public class Util {
 		int length = input.readInt();
     	byte[] bytes = new byte[length];
     	readBytes(input, bytes, length);
-    	return bytes.toString();
+    	return new String(bytes);
 	}
 	
 	public static int receiveInt(InputStream in) throws IOException {
@@ -68,7 +68,7 @@ public class Util {
 	public static boolean receiveOK(InputStream in, int protocol) throws IOException {
 		byte[] protocolBuff = new byte[8];
 		in.read(protocolBuff, 0, 8);
-		if(Integer.parseInt(protocolBuff.toString()) == protocol)
+		if(Integer.parseInt(new String(protocolBuff)) == protocol)
 			return true;
 		else
 			return false;
