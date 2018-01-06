@@ -210,7 +210,7 @@ public class Master {
 				return null;
 			}
 		}
-		return null;
+		return tempChunkInfoList;
 	}
 
 	private boolean releaseFileNode(FileNode fileNode) throws UnknownHostException, IOException {

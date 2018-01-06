@@ -50,7 +50,6 @@ public class SlaveCommunication {
 
 		// Receive Data
 		JSONArray chucks = new JSONArray(Util.receiveString(socket.getInputStream()));
-		
 		socket.close();
 
 		HashMap<Integer, ChunkInfo> chunkInfoList = new HashMap<Integer, ChunkInfo>();
