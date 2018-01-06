@@ -49,13 +49,7 @@ public class SlaveCommunication {
 		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.INITIALIZE_CHUNK_INFO);
 
 		// Receive Data
-		BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-		String jsonStr = in.readLine();
-		JSONArray chucks = null;
-		if (jsonStr.equals("[]"))
-			chucks = new JSONArray();
-		else
-			chucks = new JSONArray(in.readLine());
+		JSONArray chucks = new JSONArray(Util.receiveString(socket.getInputStream()));
 		
 		socket.close();
 
