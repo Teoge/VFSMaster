@@ -50,7 +50,13 @@ public class SlaveCommunication {
 
 		// Receive Data
 		BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-		JSONArray chucks = new JSONArray(in.readLine());
+		String jsonStr = in.readLine();
+		JSONArray chucks = null;
+		if (jsonStr.equals("[]"))
+			chucks = new JSONArray();
+		else
+			chucks = new JSONArray(in.readLine());
+		
 		socket.close();
 
 		HashMap<Integer, ChunkInfo> chunkInfoList = new HashMap<Integer, ChunkInfo>();

@@ -9,6 +9,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.ConnectException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
@@ -44,15 +45,17 @@ public class Master {
 	public Master() {
 		readFromJSONFile();
 		chunkInfoList = new HashMap<Integer, ChunkInfo>();
-//		for (SlaveCommunication slave : slaves) {
-//			try {
-//				chunkInfoList.putAll(slave.requestChunkInfo());
-//			} catch (UnknownHostException e) {
-//				// TODO
-//			} catch (IOException e) {
-//				e.printStackTrace();
-//			}
-//		}
+		for (SlaveCommunication slave : slaves) {
+			try {
+				chunkInfoList.putAll(slave.requestChunkInfo());
+			} catch (ConnectException e) {
+				System.err.println("Slave " + slave.IP + ":" + slave.port + " connection timeout.");
+			} catch (UnknownHostException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 
 	private void readFromJSONFile() {
@@ -144,7 +147,7 @@ public class Master {
 		for (Integer chunkId : fileNode.chunkIDList) {
 			JSONObject chunk = new JSONObject();
 			ChunkInfo chunkInfo = chunkInfoList.get(chunkId);
-			if (chunkInfo != null){
+			if (chunkInfo != null) {
 				chunk.put("chunkId", chunkInfo.chunkId);
 				chunk.put("slaveIP", chunkInfo.slaveIP);
 				chunk.put("port", chunkInfo.port);
@@ -227,11 +230,11 @@ public class Master {
 	private boolean eraseChunk(int mainChunkId) throws UnknownHostException, IOException {
 		ArrayList<Integer> chunkIds = mainCopyLookup.get(mainChunkId);
 		for (int chunkId : chunkIds) {
-			ChunkInfo chunkInfo =  chunkInfoList.get(chunkId);
-			if(chunkInfo != null){
+			ChunkInfo chunkInfo = chunkInfoList.get(chunkId);
+			if (chunkInfo != null) {
 				SlaveCommunication slave = findSlaveWithIP(chunkInfo.slaveIP);
 				if (slave == null)
-					return false;  // TODO if there is no slave, continue erasing
+					return false; // TODO if there is no slave, continue erasing
 				if (!slave.removeChunk(chunkId))
 					return false;
 				else {
