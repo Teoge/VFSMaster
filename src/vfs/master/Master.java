@@ -15,6 +15,7 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.ArrayList;
 
 import org.json.JSONArray;
@@ -32,11 +33,11 @@ public class Master {
 	private int nextFileHandleId;
 	private int nextChunkId;
 
-	private ArrayList<SlaveCommunication> slaves;
+	private ArrayList<SlaveSocket> slaves;
 
 	private HashMap<Integer, ChunkInfo> chunkInfoList;
 
-	private HashMap<Integer, ArrayList<Integer>> mainCopyLookup;
+	private HashMap<Integer, MainChunk> mainChunkList;
 
 	private static String serializedJSONFileName = "configuration.json";
 
@@ -45,7 +46,7 @@ public class Master {
 	public Master() {
 		readFromJSONFile();
 		chunkInfoList = new HashMap<Integer, ChunkInfo>();
-		for (SlaveCommunication slave : slaves) {
+		for (SlaveSocket slave : slaves) {
 			try {
 				chunkInfoList.putAll(slave.requestChunkInfo());
 			} catch (ConnectException e) {
@@ -75,27 +76,30 @@ public class Master {
 			nextFileHandleId = config.getInt("next_file_handle_id");
 			nextChunkId = config.getInt("next_chunk_id");
 			JSONArray slavesArray = config.getJSONArray("slaves");
-			slaves = new ArrayList<SlaveCommunication>();
+			slaves = new ArrayList<SlaveSocket>();
 			for (int i = 0; i < slavesArray.length(); i++) {
 				JSONObject obj = slavesArray.getJSONObject(i);
-				SlaveCommunication slave = new SlaveCommunication(obj.getString("ip"), obj.getInt("port"));
+				SlaveSocket slave = new SlaveSocket(obj.getString("ip"), obj.getInt("port"));
 				slaves.add(slave);
 			}
-			mainCopyLookup = new HashMap<Integer, ArrayList<Integer>>();
-			JSONObject mainCopyLookupJSON = config.getJSONObject("main_copy_lookup");
-			for (String key : mainCopyLookupJSON.keySet()) {
+			mainChunkList = new HashMap<Integer, MainChunk>();
+			JSONObject mainChunkListJSON = config.getJSONObject("main_copy_lookup");
+			for (String key : mainChunkListJSON.keySet()) {
+				JSONObject mainChunkJSON = mainChunkListJSON.getJSONObject(key);
+				JSONArray idsJSON = mainChunkJSON.getJSONArray("chunk_ids");
 				ArrayList<Integer> ids = new ArrayList<Integer>();
-				JSONArray idsJSON = mainCopyLookupJSON.getJSONArray(key);
 				for (int i = 0; i < idsJSON.length(); i++) {
 					ids.add(idsJSON.getInt(i));
 				}
-				mainCopyLookup.put(Integer.parseInt(key), ids);
+				mainChunkList.put(Integer.parseInt(key),
+						new MainChunk(Integer.parseInt(key), ids, mainChunkJSON.getString("file_path")));
 			}
 		} catch (FileNotFoundException | JSONException e) {
 			fileHierarchy = new FileHierarchy();
 			nextFileHandleId = 0;
 			nextChunkId = 0;
-			slaves = new ArrayList<SlaveCommunication>();
+			slaves = new ArrayList<SlaveSocket>();
+			mainChunkList = new HashMap<Integer, MainChunk>();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -107,18 +111,25 @@ public class Master {
 		config.put("next_chunk_id", nextChunkId);
 		config.put("file_hierarchy", fileHierarchy.toJSON());
 		JSONArray slavesArray = new JSONArray();
-		for (SlaveCommunication slave : slaves) {
+		for (SlaveSocket slave : slaves) {
 			JSONObject obj = new JSONObject();
 			obj.put("ip", slave.IP);
 			obj.put("port", slave.port);
 			slavesArray.put(obj);
 		}
 		config.put("slaves", slavesArray);
-		JSONObject mainCopyLookupJSON = new JSONObject();
-		for (Map.Entry<Integer, ArrayList<Integer>> entry : mainCopyLookup.entrySet()) {
-			mainCopyLookupJSON.put(entry.getKey().toString(), entry.getValue());
+		JSONObject mainChunkListJSON = new JSONObject();
+		for (Map.Entry<Integer, MainChunk> entry : mainChunkList.entrySet()) {
+			JSONObject mainChunkJSON = new JSONObject();
+			JSONArray ids = new JSONArray();
+			for (int id : entry.getValue().getChunkIds()) {
+				ids.put(id);
+			}
+			mainChunkJSON.put("file_path", entry.getValue().getFilePath());
+			mainChunkJSON.put("chunk_ids", ids);
+			mainChunkListJSON.put(entry.getKey().toString(), mainChunkJSON);
 		}
-		config.put("main_copy_lookup", mainCopyLookupJSON);
+		config.put("main_chunk_list", mainChunkListJSON);
 		try {
 			FileWriter fileWriter = new FileWriter(serializedJSONFileName);
 			fileWriter.write(config.toString());
@@ -128,8 +139,9 @@ public class Master {
 		}
 	}
 
-	private JSONObject open(String path, String name) {
-		FileNode fileNode = fileHierarchy.openFile(path, name);
+	private JSONObject open(String path) {
+		int delimeter = path.lastIndexOf("/");
+		FileNode fileNode = fileHierarchy.openFile(path.substring(0, delimeter), path.substring(delimeter + 1));
 		if (fileNode == null)
 			return null;
 
@@ -160,12 +172,16 @@ public class Master {
 		return handle;
 	}
 
-	private boolean remove(String path, String name) throws UnknownHostException, IOException {
-		return releaseFileNode(fileHierarchy.remove(path, name));
+	private boolean remove(String path) throws UnknownHostException, IOException {
+		int delimeter = path.lastIndexOf("/");
+		return releaseFileNode(fileHierarchy.remove(path.substring(0, delimeter), path.substring(delimeter + 1)));
 	}
 
-	private JSONArray addChunk(String path, String name) throws UnknownHostException, IOException {
-		FileNode fileNode = fileHierarchy.openFile(path, name);
+	private JSONArray addChunk(String path) throws UnknownHostException, IOException {
+		int delimeter = path.lastIndexOf("/");
+		FileNode fileNode = fileHierarchy.openFile(path.substring(0, delimeter), path.substring(delimeter + 1));
+		if (fileNode == null)
+			return null;
 		ArrayList<Integer> chunkIdList = new ArrayList<Integer>();
 		ArrayList<ChunkInfo> tempChunkInfoList = createChunk(fileNode.getChunkSize(), chunkIdList);
 		if (tempChunkInfoList == null)
@@ -176,7 +192,7 @@ public class Master {
 			chunkInfoList.put(chunkInfo.chunkId, chunkInfo);
 		}
 		fileNode.addChunk(chunkInfo.chunkId);
-		mainCopyLookup.put(chunkInfo.chunkId, chunkIdList);
+		mainChunkList.put(chunkInfo.chunkId, new MainChunk(chunkInfo.chunkId, chunkIdList, path));
 		JSONArray chunkList = new JSONArray();
 		for (Integer chunkId : fileNode.chunkIDList) {
 			JSONObject chunk = new JSONObject();
@@ -195,7 +211,7 @@ public class Master {
 		ArrayList<ChunkInfo> tempChunkInfoList = new ArrayList<ChunkInfo>();
 		int originalNextChunkId = nextChunkId;
 		for (int i = 0; i < numOfCopies; i++) {
-			SlaveCommunication slave = slaves.get(i);// TODO choose a slave
+			SlaveSocket slave = slaves.get(i);// TODO choose a slave
 			int currentId = nextChunkId++;
 			try {
 				if (i == numOfCopies - 1)
@@ -228,11 +244,11 @@ public class Master {
 	}
 
 	private boolean eraseChunk(int mainChunkId) throws UnknownHostException, IOException {
-		ArrayList<Integer> chunkIds = mainCopyLookup.get(mainChunkId);
+		ArrayList<Integer> chunkIds = mainChunkList.get(mainChunkId).getChunkIds();
 		for (int chunkId : chunkIds) {
 			ChunkInfo chunkInfo = chunkInfoList.get(chunkId);
 			if (chunkInfo != null) {
-				SlaveCommunication slave = findSlaveWithIP(chunkInfo.slaveIP);
+				SlaveSocket slave = findSlaveWithIP(chunkInfo.slaveIP);
 				if (slave == null)
 					return false; // TODO if there is no slave, continue erasing
 				if (!slave.removeChunk(chunkId))
@@ -242,12 +258,12 @@ public class Master {
 				}
 			}
 		}
-		mainCopyLookup.remove(mainChunkId);
+		mainChunkList.remove(mainChunkId);
 		return true;
 	}
 
-	private SlaveCommunication findSlaveWithIP(String IP) {
-		for (SlaveCommunication slave : slaves) {
+	private SlaveSocket findSlaveWithIP(String IP) {
+		for (SlaveSocket slave : slaves) {
 			if (slave.IP.equals(IP)) {
 				return slave;
 			}
@@ -273,45 +289,33 @@ public class Master {
 		@Override
 		public void run() {
 			try {
-				String fullPath = null;
-				int delimeter = 0;
 				String path = null;
-				String name = null;
 				switch (protocol) {
 				case VSFProtocols.OPEN_FILE:
 					// 1. request file handle
-					fullPath = Util.receiveString(in);
-					delimeter = fullPath.lastIndexOf("/");
-					path = fullPath.substring(0, delimeter);
-					name = fullPath.substring(delimeter + 1);
-					JSONObject fileHandle = open(path, name);
+					JSONObject fileHandle = open(Util.receiveString(in));
 					if (fileHandle != null) {
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 						Util.sendJSON(out, fileHandle);
 					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
 					}
+					saveToJSONFile();
 					break;
 				case VSFProtocols.REMOVE_FILE:
 					// 2. remove file/folder?
-					fullPath = Util.receiveString(in);
-					delimeter = fullPath.lastIndexOf("/");
-					path = fullPath.substring(0, delimeter);
-					name = fullPath.substring(delimeter + 1);
-					if (remove(path, name))
+					if (remove(Util.receiveString(in)))
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 					else
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
+					saveToJSONFile();
 					break;
 				case VSFProtocols.ADD_CHUNK:
-					fullPath = Util.receiveString(in);
-					delimeter = fullPath.lastIndexOf("/");
-					path = fullPath.substring(0, delimeter);
-					name = fullPath.substring(delimeter + 1);
+					path = Util.receiveString(in);
 					int chunkSize = Util.receiveInt(in);
 					JSONArray array = null;
 					for (int i = 0; i < chunkSize; i++) {
-						array = addChunk(path, name);
+						array = addChunk(path);
 					}
 					if (array != null) {
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
@@ -319,17 +323,17 @@ public class Master {
 					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
 					}
+					saveToJSONFile();
 					break;
 				case VSFProtocols.MK_DIR:
-					fullPath = Util.receiveString(in);
-					delimeter = fullPath.lastIndexOf("/");
-					path = fullPath.substring(0, delimeter);
-					name = fullPath.substring(delimeter + 1);
-					if (fileHierarchy.mkdir(path, name)) {
+					path = Util.receiveString(in);
+					int delimeter = path.lastIndexOf("/");
+					if (fileHierarchy.mkdir(path.substring(0, delimeter), path.substring(delimeter + 1))) {
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
 					}
+					saveToJSONFile();
 					break;
 				case VSFProtocols.GET_FILE_NODE:
 					Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
@@ -339,9 +343,76 @@ public class Master {
 					break;
 				}
 			} catch (IOException e) {
-
+				e.printStackTrace();
 			}
 		}
+	}
+
+	public class RentImpl extends Thread {
+
+		public RentImpl() {
+
+		}
+
+		@Override
+		public void run() {
+			super.run();
+			while (true) {
+				try {
+					TimeUnit.SECONDS.sleep(1);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				ArrayList<Integer> invaildChunkIds = new ArrayList<Integer>();
+				for (Map.Entry<Integer, MainChunk> entry : mainChunkList.entrySet()) {
+					if (entry.getValue().decreaseRentTime()) {
+						invaildChunkIds.add(entry.getKey());
+					}
+				}
+				for (int invaildChunkId : invaildChunkIds) {
+					MainChunk mainChunk = mainChunkList.get(invaildChunkId);
+					int newMainChunkId = mainChunk.changeMainChunck();
+					String path = mainChunk.getFilePath();
+					int delimeter = path.lastIndexOf("/");
+					FileNode fileNode = fileHierarchy.openFile(path.substring(0, delimeter), path.substring(delimeter + 1));
+					if(fileNode!=null) {
+						fileNode.removeChunk(invaildChunkId);
+						fileNode.addChunk(newMainChunkId);
+					}
+					mainChunkList.put(newMainChunkId, mainChunkList.remove(invaildChunkId));
+					chunkInfoList.remove(invaildChunkId);
+				}
+			}
+		}
+
+	}
+
+	public class HeartBeatDetector extends Thread {
+
+		private static final int heartBeatDetectInterval = 10;
+
+		@Override
+		public void run() {
+			while (true) {
+				try {
+					TimeUnit.SECONDS.sleep(heartBeatDetectInterval);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				for (SlaveSocket slave : slaves) {
+					try {
+						if (slave.detectHeartBeat())
+							continue;
+						else
+							throw new IOException();
+					} catch (IOException e) {
+						System.out.println("Slave " + slave.IP + ":" + slave.port + " not responding.");
+
+					}
+				}
+			}
+		}
+
 	}
 
 	public static void main(String[] args) {

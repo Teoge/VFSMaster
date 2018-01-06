@@ -1,8 +1,6 @@
 package vfs.master;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.net.UnknownHostException;
@@ -15,12 +13,12 @@ import org.json.JSONObject;
 import vfs.struct.ChunkInfo;
 import vfs.struct.VSFProtocols;
 
-public class SlaveCommunication {
+public class SlaveSocket {
 
 	public String IP;
 	public int port;
 
-	public SlaveCommunication(String iP, int port) {
+	public SlaveSocket(String iP, int port) {
 		super();
 		IP = iP;
 		this.port = port;
