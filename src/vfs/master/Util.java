@@ -57,6 +57,11 @@ public class Util {
     	return new String(bytes);
 	}
 	
+	public static void sendInt(OutputStream out, int i) throws IOException {
+		DataOutputStream output = new DataOutputStream(out);
+		output.writeInt(i);
+	}
+	
 	public static int receiveInt(InputStream in) throws IOException {
 		DataInputStream input = new DataInputStream(in);
 		return input.readInt();

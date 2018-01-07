@@ -217,7 +217,7 @@ public class Master {
 			int currentId = nextChunkId++;
 			try {
 				if (i == numOfCopies - 1)
-					slave.createChunk(currentId, true, chunkIdList);
+					slave.createChunk(currentId, true, tempChunkInfoList);
 				else
 					slave.createChunk(currentId, false, null);
 				tempChunkInfoList
@@ -278,10 +278,12 @@ public class Master {
 		int newMainChunkId = mainChunk.changeMainChunck();
 		String path = mainChunk.getFilePath();
 		int delimeter = path.lastIndexOf("/");
-		FileNode fileNode = fileHierarchy.openFile(path.substring(0, delimeter), path.substring(delimeter + 1));
+		String folderPath = path.substring(0, delimeter);
+		String fileName = path.substring(delimeter + 1);
+		FileNode fileNode = fileHierarchy.openFile(folderPath, fileName);
 		if (fileNode != null) {
 			if (newMainChunkId == -1) {
-				// TODO What happen if every chunk fail?
+				fileHierarchy.remove(folderPath, fileName);
 				return;
 			}
 			fileNode.removeChunk(mainChunkId);
@@ -289,6 +291,11 @@ public class Master {
 		}
 		mainChunkList.put(newMainChunkId, mainChunkList.remove(mainChunkId));
 		chunkInfoList.remove(mainChunkId);
+		try {
+			findSlaveWithIP(chunkInfoList.get(newMainChunkId).slaveIP).assignNewMainChunk(newMainChunkId);
+		} catch (IOException e) {
+			fileHierarchy.remove(folderPath, fileName);
+		}
 	}
 
 	public class ClientWorker extends Thread {
