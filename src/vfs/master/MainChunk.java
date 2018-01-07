@@ -2,18 +2,16 @@ package vfs.master;
 
 import java.util.ArrayList;
 
-import vfs.struct.FileNode;
-
 public class MainChunk {
 
-	private static int rentTimeLeftInitial = 1000;
+	private static int leaseInitial = 1000;
 
 	private int mainChunkId;
 
 	private ArrayList<Integer> chunkIds;
 
-	private int rentTimeLeft;
-	
+	private int leaseLeft;
+
 	private String filePath;
 
 	public MainChunk(int mainChunkId, ArrayList<Integer> chunkIds, String filePath) {
@@ -21,18 +19,25 @@ public class MainChunk {
 		this.mainChunkId = mainChunkId;
 		this.chunkIds = chunkIds;
 		this.filePath = filePath;
-		this.rentTimeLeft = rentTimeLeftInitial;
+		this.leaseLeft = leaseInitial;
 	}
 
-	public boolean decreaseRentTime() {
-		if (--rentTimeLeft == 0)
+	public boolean decreaseLease() {
+		if (--leaseLeft == 0)
 			return true;
 		else
 			return false;
 	}
+	
+	public void renewLease() {
+		this.leaseLeft = leaseInitial;
+	}
 
 	public int changeMainChunck() {
-		chunkIds.remove(mainChunkId);
+		for (int i = 0; i < chunkIds.size(); ++i) {
+			if (chunkIds.get(i) == mainChunkId)
+				chunkIds.remove(i);
+		}
 		if (chunkIds.isEmpty())
 			return -1;
 		mainChunkId = chunkIds.get(0);

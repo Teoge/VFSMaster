@@ -57,6 +57,8 @@ public class Master {
 				e.printStackTrace();
 			}
 		}
+		new HeartBeatDetector().start();
+		new RentImpl().start();
 	}
 
 	private void readFromJSONFile() {
@@ -271,6 +273,24 @@ public class Master {
 		return null;
 	}
 
+	private void alterMainChunk(int mainChunkId) {
+		MainChunk mainChunk = mainChunkList.get(mainChunkId);
+		int newMainChunkId = mainChunk.changeMainChunck();
+		String path = mainChunk.getFilePath();
+		int delimeter = path.lastIndexOf("/");
+		FileNode fileNode = fileHierarchy.openFile(path.substring(0, delimeter), path.substring(delimeter + 1));
+		if (fileNode != null) {
+			if (newMainChunkId == -1) {
+				// TODO What happen if every chunk fail?
+				return;
+			}
+			fileNode.removeChunk(mainChunkId);
+			fileNode.addChunk(newMainChunkId);
+		}
+		mainChunkList.put(newMainChunkId, mainChunkList.remove(mainChunkId));
+		chunkInfoList.remove(mainChunkId);
+	}
+
 	public class ClientWorker extends Thread {
 
 		int protocol;
@@ -297,18 +317,19 @@ public class Master {
 					if (fileHandle != null) {
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 						Util.sendJSON(out, fileHandle);
+						saveToJSONFile();
 					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
 					}
-					saveToJSONFile();
 					break;
 				case VSFProtocols.REMOVE_FILE:
 					// 2. remove file/folder?
-					if (remove(Util.receiveString(in)))
+					if (remove(Util.receiveString(in))) {
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
-					else
+						saveToJSONFile();
+					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
-					saveToJSONFile();
+					}
 					break;
 				case VSFProtocols.ADD_CHUNK:
 					path = Util.receiveString(in);
@@ -320,28 +341,40 @@ public class Master {
 					if (array != null) {
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 						Util.sendJSON(out, array);
+						saveToJSONFile();
 					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
 					}
-					saveToJSONFile();
 					break;
 				case VSFProtocols.MK_DIR:
 					path = Util.receiveString(in);
 					int delimeter = path.lastIndexOf("/");
 					if (fileHierarchy.mkdir(path.substring(0, delimeter), path.substring(delimeter + 1))) {
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
+						saveToJSONFile();
 					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
 					}
-					saveToJSONFile();
 					break;
 				case VSFProtocols.GET_FILE_NODE:
 					Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 					Util.sendJSON(out, fileHierarchy.toJSON());
 					break;
+				case VSFProtocols.RENEW_LEASE:
+					MainChunk mainChunk = mainChunkList.get(Util.receiveInt(in));
+					if (mainChunk != null) {
+						mainChunk.renewLease();
+						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
+					} else {
+						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
+					}
+				case VSFProtocols.HEART_BEAT_DETECT_TO_MASTER:
+					Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 				default:
 					break;
 				}
+			} catch (ConnectException e) {
+				System.out.println("Connection timeout.");
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -349,10 +382,6 @@ public class Master {
 	}
 
 	public class RentImpl extends Thread {
-
-		public RentImpl() {
-
-		}
 
 		@Override
 		public void run() {
@@ -365,22 +394,12 @@ public class Master {
 				}
 				ArrayList<Integer> invaildChunkIds = new ArrayList<Integer>();
 				for (Map.Entry<Integer, MainChunk> entry : mainChunkList.entrySet()) {
-					if (entry.getValue().decreaseRentTime()) {
+					if (entry.getValue().decreaseLease()) {
 						invaildChunkIds.add(entry.getKey());
 					}
 				}
 				for (int invaildChunkId : invaildChunkIds) {
-					MainChunk mainChunk = mainChunkList.get(invaildChunkId);
-					int newMainChunkId = mainChunk.changeMainChunck();
-					String path = mainChunk.getFilePath();
-					int delimeter = path.lastIndexOf("/");
-					FileNode fileNode = fileHierarchy.openFile(path.substring(0, delimeter), path.substring(delimeter + 1));
-					if(fileNode!=null) {
-						fileNode.removeChunk(invaildChunkId);
-						fileNode.addChunk(newMainChunkId);
-					}
-					mainChunkList.put(newMainChunkId, mainChunkList.remove(invaildChunkId));
-					chunkInfoList.remove(invaildChunkId);
+					alterMainChunk(invaildChunkId);
 				}
 			}
 		}
@@ -389,7 +408,7 @@ public class Master {
 
 	public class HeartBeatDetector extends Thread {
 
-		private static final int heartBeatDetectInterval = 10;
+		private static final int heartBeatDetectInterval = 60;
 
 		@Override
 		public void run() {
@@ -404,10 +423,21 @@ public class Master {
 						if (slave.detectHeartBeat())
 							continue;
 						else
-							throw new IOException();
-					} catch (IOException e) {
+							throw new ConnectException();
+					} catch (ConnectException e) {
 						System.out.println("Slave " + slave.IP + ":" + slave.port + " not responding.");
-
+						ArrayList<Integer> invaildChunkIds = new ArrayList<Integer>();
+						for (int mainChunkId : mainChunkList.keySet()) {
+							ChunkInfo chunkInfo = chunkInfoList.get(mainChunkId);
+							if (chunkInfo.slaveIP.equals(slave.IP) && chunkInfo.port == slave.port) {
+								invaildChunkIds.add(mainChunkId);
+							}
+						}
+						for (int invaildChunkId : invaildChunkIds) {
+							alterMainChunk(invaildChunkId);
+						}
+					} catch (IOException e) {
+						e.printStackTrace();
 					}
 				}
 			}
