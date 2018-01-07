@@ -1,8 +1,6 @@
 package vfs.master;
 
 import java.io.BufferedReader;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -15,6 +13,7 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.ArrayList;
 
@@ -39,6 +38,8 @@ public class Master {
 
 	private HashMap<Integer, MainChunk> mainChunkList;
 
+	Random masterRand;
+
 	private static String serializedJSONFileName = "configuration.json";
 
 	private static int numOfCopies = 3;
@@ -53,6 +54,26 @@ public class Master {
 				System.err.println("Slave " + slave.IP + ":" + slave.port + " connection timeout.");
 			} catch (UnknownHostException e) {
 				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		masterRand = new Random();
+		for (MainChunk mainChunk : mainChunkList.values()) {
+			ArrayList<Integer> chunkIds = mainChunk.getChunkIds();
+			int newMainChunkId = chunkIds.get(masterRand.nextInt(chunkIds.size()));
+			ArrayList<ChunkInfo> copyChunkInfoList = new ArrayList<ChunkInfo>();
+			for (int chunkId : chunkIds) {
+				if (chunkId != newMainChunkId) {
+					ChunkInfo chunkInfo = chunkInfoList.get(chunkId);
+					if (chunkInfo != null)
+						copyChunkInfoList.add(chunkInfo);
+				}
+			}
+			try {
+				if (!findSlaveWithIP(chunkInfoList.get(newMainChunkId).slaveIP).assignMainChunk(newMainChunkId,
+						copyChunkInfoList))
+					throw new IOException();
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -213,7 +234,7 @@ public class Master {
 		ArrayList<ChunkInfo> tempChunkInfoList = new ArrayList<ChunkInfo>();
 		int originalNextChunkId = nextChunkId;
 		for (int i = 0; i < numOfCopies; i++) {
-			SlaveSocket slave = slaves.get(i);// TODO choose a slave
+			SlaveSocket slave = slaves.get(masterRand.nextInt(slaves.size()));
 			int currentId = nextChunkId++;
 			try {
 				if (i == numOfCopies - 1)
@@ -273,29 +294,56 @@ public class Master {
 		return null;
 	}
 
-	private void alterMainChunk(int mainChunkId) {
+	private int alterMainChunk(int mainChunkId) {
 		MainChunk mainChunk = mainChunkList.get(mainChunkId);
-		int newMainChunkId = mainChunk.changeMainChunck();
 		String path = mainChunk.getFilePath();
 		int delimeter = path.lastIndexOf("/");
 		String folderPath = path.substring(0, delimeter);
 		String fileName = path.substring(delimeter + 1);
-		FileNode fileNode = fileHierarchy.openFile(folderPath, fileName);
-		if (fileNode != null) {
+
+		int newMainChunkId;
+		while (true) {
+			newMainChunkId = mainChunk.changeMainChunck();
 			if (newMainChunkId == -1) {
 				fileHierarchy.remove(folderPath, fileName);
-				return;
+				return newMainChunkId;
 			}
-			fileNode.removeChunk(mainChunkId);
-			fileNode.addChunk(newMainChunkId);
+			ChunkInfo chunkInfo = chunkInfoList.get(newMainChunkId);
+			if (chunkInfo != null) {
+				SlaveSocket slave = findSlaveWithIP(chunkInfo.slaveIP);
+				if (slave != null) {
+					ArrayList<ChunkInfo> copyChunkInfoList = new ArrayList<ChunkInfo>();
+					for (int chunkId : mainChunk.getChunkIds()) {
+						if (chunkId != newMainChunkId) {
+							ChunkInfo copyChunkInfo = chunkInfoList.get(chunkId);
+							if (copyChunkInfo != null)
+								copyChunkInfoList.add(copyChunkInfo);
+						}
+					}
+					try {
+						if (slave.assignMainChunk(newMainChunkId, copyChunkInfoList)) {
+							FileNode fileNode = fileHierarchy.openFile(folderPath, fileName);
+							if (fileNode != null) {
+								fileNode.removeChunk(mainChunkId);
+								fileNode.addChunk(newMainChunkId);
+								break;
+							} else {
+								return -1;
+							}
+						} else {
+							chunkInfoList.remove(newMainChunkId);
+						}
+					} catch (IOException e) {
+						continue;
+					}
+				} else {
+					chunkInfoList.remove(newMainChunkId);
+				}
+			}
 		}
 		mainChunkList.put(newMainChunkId, mainChunkList.remove(mainChunkId));
 		chunkInfoList.remove(mainChunkId);
-		try {
-			findSlaveWithIP(chunkInfoList.get(newMainChunkId).slaveIP).assignNewMainChunk(newMainChunkId);
-		} catch (IOException e) {
-			fileHierarchy.remove(folderPath, fileName);
-		}
+		return newMainChunkId;
 	}
 
 	public class ClientWorker extends Thread {

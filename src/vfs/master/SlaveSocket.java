@@ -108,11 +108,24 @@ public class SlaveSocket {
 		return succeed;
 	}
 	
-	public boolean assignNewMainChunk(int chunkId) throws UnknownHostException, IOException {
+	public boolean assignMainChunk(int chunkId, ArrayList<ChunkInfo> copyChunkInfos) throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
 		OutputStream out = socket.getOutputStream();
-		Util.sendProtocol(out, VSFProtocols.ASSIGN_NEW_MAIN_CHUNK);
-		Util.sendInt(out, chunkId);
+		Util.sendProtocol(out, VSFProtocols.ASSIGN_MAIN_CHUNK);
+		JSONObject mainChunkInfo = new JSONObject();
+		mainChunkInfo.put("main_chunk_id", chunkId);
+		JSONArray copies = new JSONArray();
+		if (copyChunkInfos != null) {
+			for (ChunkInfo chunkInfo : copyChunkInfos) {
+				JSONObject copyChunkInfo = new JSONObject();
+				copyChunkInfo.put("chunk_id", chunkInfo.chunkId);
+				copyChunkInfo.put("slave_ip", chunkInfo.slaveIP);
+				copyChunkInfo.put("port", chunkInfo.port);
+				copies.put(copyChunkInfo);
+			}
+		}
+		mainChunkInfo.put("copies", copies);
+		Util.sendJSON(out, mainChunkInfo);
 		boolean succeed = Util.receiveOK(socket.getInputStream());
 		socket.close();
 		return succeed;
