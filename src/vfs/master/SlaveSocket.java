@@ -61,7 +61,7 @@ public class SlaveSocket {
 		return chunkInfoList;
 	}
 
-	public void createChunk(int chunkID, boolean isRent, ArrayList<ChunkInfo> copyChunkInfos)
+	public void createChunk(int chunkID, ArrayList<ChunkInfo> copyChunkInfos)
 			throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
 
@@ -69,8 +69,7 @@ public class SlaveSocket {
 		OutputStream out = socket.getOutputStream();
 		Util.sendProtocol(out, VSFProtocols.NEW_CHUNK);
 		JSONObject createChunkInfo = new JSONObject();
-		createChunkInfo.put("chunk_id", chunkID);
-		createChunkInfo.put("is_rent", isRent);
+		createChunkInfo.put("main_chunk_id", chunkID);
 		JSONArray copies = new JSONArray();
 		if (copyChunkInfos != null) {
 			for (ChunkInfo chunkInfo : copyChunkInfos) {

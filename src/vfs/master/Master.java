@@ -233,21 +233,27 @@ public class Master {
 	private ArrayList<ChunkInfo> createChunk(int chunkIndexInFile, ArrayList<Integer> chunkIdList) {
 		ArrayList<ChunkInfo> tempChunkInfoList = new ArrayList<ChunkInfo>();
 		int originalNextChunkId = nextChunkId;
+		int mainChunkId = 0;
+		SlaveSocket mainChunkSlave = null;
 		for (int i = 0; i < numOfCopies; i++) {
 			SlaveSocket slave = slaves.get(masterRand.nextInt(slaves.size()));
 			int currentId = nextChunkId++;
-			try {
-				if (i == numOfCopies - 1)
-					slave.createChunk(currentId, true, tempChunkInfoList);
-				else
-					slave.createChunk(currentId, false, null);
-				tempChunkInfoList
-						.add(new ChunkInfo(currentId, slave.getIP(), slave.getPort(), chunkIndexInFile, 0));
+			if (i == numOfCopies - 1) {
+				mainChunkId = currentId;
+				mainChunkSlave = slave;
+			} else {
 				chunkIdList.add(currentId);
-			} catch (IOException e) {
-				nextChunkId = originalNextChunkId;
-				return null;
+				tempChunkInfoList.add(new ChunkInfo(currentId, slave.getIP(), slave.getPort(), chunkIndexInFile, 0));
 			}
+		}
+		try {
+			mainChunkSlave.createChunk(mainChunkId, tempChunkInfoList);
+			chunkIdList.add(mainChunkId);
+			tempChunkInfoList.add(
+					new ChunkInfo(mainChunkId, mainChunkSlave.getIP(), mainChunkSlave.getPort(), chunkIndexInFile, 0));
+		} catch (IOException e) {
+			nextChunkId = originalNextChunkId;
+			return null;
 		}
 		return tempChunkInfoList;
 	}
@@ -463,7 +469,7 @@ public class Master {
 
 	public class HeartBeatDetector extends Thread {
 
-		private static final int heartBeatDetectInterval = 10;
+		private static final int heartBeatDetectInterval = 10000000;
 
 		@Override
 		public void run() {
