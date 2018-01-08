@@ -45,7 +45,7 @@ public class SlaveSocket {
 
 		// Send Request
 		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.INITIALIZE_CHUNK_INFO);
-
+		System.out.println("Request chunk info list from" + IP + ":" + port + ".");
 		// Receive Data
 		JSONArray chucks = new JSONArray(Util.receiveString(socket.getInputStream()));
 		socket.close();
@@ -82,10 +82,11 @@ public class SlaveSocket {
 		}
 		createChunkInfo.put("copies", copies);
 		Util.sendJSON(out, createChunkInfo);
+		System.out.println("Request " + IP + ":" + port + " to create chunk.");
 
 		// Receive Data
 		boolean succeed = Util.receiveOK(socket.getInputStream());
-		System.out.println("Create chunk statue from " + IP + ":" + port + ":" + succeed);
+		System.out.println("Create chunk statue from " + IP + ":" + port + " : " + succeed);
 		socket.close();
 		if (!succeed)
 			throw new IOException();
@@ -96,6 +97,7 @@ public class SlaveSocket {
 		OutputStream out = socket.getOutputStream();
 		Util.sendProtocol(out, VSFProtocols.RELEASE_CHUNK);
 		Util.sendInt(out, chunkID);
+		System.out.println("Request " + IP + ":" + port + " to remove chunk.");
 		boolean succeed = Util.receiveOK(socket.getInputStream());
 		System.out.println("Remove chunk statue from " + IP + ":" + port + ":" + succeed);
 		socket.close();
@@ -105,6 +107,7 @@ public class SlaveSocket {
 	public boolean detectHeartBeat() throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
 		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.HEART_BEAT_DETECT_TO_SLAVE);
+		System.out.println("Request heart beat from" + IP + ":" + port + ".");
 		boolean succeed = Util.receiveOK(socket.getInputStream());
 		System.out.println("Heart beat from " + IP + ":" + port);
 		socket.close();
@@ -130,6 +133,7 @@ public class SlaveSocket {
 		}
 		mainChunkInfo.put("copies", copies);
 		Util.sendJSON(out, mainChunkInfo);
+		System.out.println("Request " + IP + ":" + port + " to assign main chunk.");
 		boolean succeed = Util.receiveOK(socket.getInputStream());
 		System.out.println("Assign chunk statue from " + IP + ":" + port + ":" + succeed);
 		socket.close();

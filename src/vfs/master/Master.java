@@ -377,19 +377,23 @@ public class Master {
 					JSONObject fileHandle = open(Util.receiveString(in));
 					if (fileHandle != null) {
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
+						System.out.println("Open file OK.");
 						Util.sendJSON(out, fileHandle);
 						saveToJSONFile();
 					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
+						System.out.println("Open file Fail.");
 					}
 					break;
 				case VSFProtocols.REMOVE_FILE:
 					// 2. remove file/folder?
 					if (remove(Util.receiveString(in))) {
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
+						System.out.println("Remove file OK.");
 						saveToJSONFile();
 					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
+						System.out.println("Remove file Fail.");
 					}
 					break;
 				case VSFProtocols.ADD_CHUNK:
@@ -401,10 +405,12 @@ public class Master {
 					}
 					if (array != null) {
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
+						System.out.println("Add chunk OK.");
 						Util.sendJSON(out, array);
 						saveToJSONFile();
 					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
+						System.out.println("Add chunk Fail.");
 					}
 					break;
 				case VSFProtocols.MK_DIR:
@@ -412,25 +418,31 @@ public class Master {
 					int delimeter = path.lastIndexOf("/");
 					if (fileHierarchy.mkdir(path.substring(0, delimeter), path.substring(delimeter + 1))) {
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
+						System.out.println("Make dir OK.");
 						saveToJSONFile();
 					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
+						System.out.println("Make dir Fail.");
 					}
 					break;
 				case VSFProtocols.GET_FILE_NODE:
 					Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
 					Util.sendJSON(out, fileHierarchy.toJSON());
+					System.out.println("File Node sent.");
 					break;
 				case VSFProtocols.RENEW_LEASE:
 					MainChunk mainChunk = mainChunkList.get(Util.receiveInt(in));
 					if (mainChunk != null) {
 						mainChunk.renewLease();
 						Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
+						System.out.println("Renew lease OK.");
 					} else {
 						Util.sendSignal(out, VSFProtocols.MASTER_REJECT);
+						System.out.println("Renew lease Fail.");
 					}
 				case VSFProtocols.HEART_BEAT_DETECT_TO_MASTER:
 					Util.sendSignal(out, VSFProtocols.MESSAGE_OK);
+					System.out.println("Heart beat OK.");
 				default:
 					break;
 				}

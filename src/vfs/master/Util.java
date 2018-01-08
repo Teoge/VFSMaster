@@ -70,7 +70,6 @@ public class Util {
 	public static void sendSignal(OutputStream out, String str) throws IOException {
 		DataOutputStream output = new DataOutputStream(out);
 		output.writeUTF(str);
-		System.out.println("Master response: " + str);
 	}
 
 	public static boolean receiveOK(InputStream in) throws IOException {
