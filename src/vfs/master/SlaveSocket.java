@@ -57,6 +57,7 @@ public class SlaveSocket {
 					chunk.getInt("port"), chunk.getInt("file_index"), chunk.getInt("chunk_left"));
 			chunkInfoList.put(chunkInfo.chunkId, chunkInfo);
 		}
+		System.out.println("Receive chunk info list from " + IP + ":" + port);
 		return chunkInfoList;
 	}
 
@@ -85,6 +86,7 @@ public class SlaveSocket {
 
 		// Receive Data
 		boolean succeed = Util.receiveOK(socket.getInputStream());
+		System.out.println("Create chunk statue from " + IP + ":" + port + ":" + succeed);
 		socket.close();
 		if (!succeed)
 			throw new IOException();
@@ -96,6 +98,7 @@ public class SlaveSocket {
 		Util.sendProtocol(out, VSFProtocols.RELEASE_CHUNK);
 		Util.sendInt(out, chunkID);
 		boolean succeed = Util.receiveOK(socket.getInputStream());
+		System.out.println("Remove chunk statue from " + IP + ":" + port + ":" + succeed);
 		socket.close();
 		return succeed;
 	}
@@ -104,11 +107,13 @@ public class SlaveSocket {
 		Socket socket = new Socket(IP, port);
 		Util.sendProtocol(socket.getOutputStream(), VSFProtocols.HEART_BEAT_DETECT_TO_SLAVE);
 		boolean succeed = Util.receiveOK(socket.getInputStream());
+		System.out.println("Heart beat from " + IP + ":" + port);
 		socket.close();
 		return succeed;
 	}
-	
-	public boolean assignMainChunk(int chunkId, ArrayList<ChunkInfo> copyChunkInfos) throws UnknownHostException, IOException {
+
+	public boolean assignMainChunk(int chunkId, ArrayList<ChunkInfo> copyChunkInfos)
+			throws UnknownHostException, IOException {
 		Socket socket = new Socket(IP, port);
 		OutputStream out = socket.getOutputStream();
 		Util.sendProtocol(out, VSFProtocols.ASSIGN_MAIN_CHUNK);
@@ -127,6 +132,7 @@ public class SlaveSocket {
 		mainChunkInfo.put("copies", copies);
 		Util.sendJSON(out, mainChunkInfo);
 		boolean succeed = Util.receiveOK(socket.getInputStream());
+		System.out.println("Assign chunk statue from " + IP + ":" + port + ":" + succeed);
 		socket.close();
 		return succeed;
 	}

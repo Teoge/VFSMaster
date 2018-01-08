@@ -106,7 +106,7 @@ public class Master {
 				slaves.add(slave);
 			}
 			mainChunkList = new HashMap<Integer, MainChunk>();
-			JSONObject mainChunkListJSON = config.getJSONObject("main_copy_lookup");
+			JSONObject mainChunkListJSON = config.getJSONObject("main_chunk_list");
 			for (String key : mainChunkListJSON.keySet()) {
 				JSONObject mainChunkJSON = mainChunkListJSON.getJSONObject(key);
 				JSONArray idsJSON = mainChunkJSON.getJSONArray("chunk_ids");
@@ -463,7 +463,7 @@ public class Master {
 
 	public class HeartBeatDetector extends Thread {
 
-		private static final int heartBeatDetectInterval = 60;
+		private static final int heartBeatDetectInterval = 10;
 
 		@Override
 		public void run() {
