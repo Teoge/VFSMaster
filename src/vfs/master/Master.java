@@ -242,7 +242,7 @@ public class Master {
 				else
 					slave.createChunk(currentId, false, null);
 				tempChunkInfoList
-						.add(new ChunkInfo(currentId, slave.getIP(), slaves.get(i).getPort(), chunkIndexInFile, 0));
+						.add(new ChunkInfo(currentId, slave.getIP(), slave.getPort(), chunkIndexInFile, 0));
 				chunkIdList.add(currentId);
 			} catch (IOException e) {
 				nextChunkId = originalNextChunkId;
