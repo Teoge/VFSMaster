@@ -259,17 +259,19 @@ public class Master {
 	}
 
 	private boolean releaseFileNode(FileNode fileNode) throws UnknownHostException, IOException {
+		boolean succeed = true;
 		if (fileNode.isDir) {
 			if (fileNode.child != null)
 				releaseFileNode(fileNode.child);
 		} else {
 			for (int chunkId : fileNode.chunkIDList) {
-				return eraseChunk(chunkId);
+				if (!eraseChunk(chunkId))
+					succeed = false;
 			}
 		}
 		if (fileNode.brother != null)
 			releaseFileNode(fileNode.brother);
-		return true;
+		return succeed;
 	}
 
 	private boolean eraseChunk(int mainChunkId) throws UnknownHostException, IOException {
