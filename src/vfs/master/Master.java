@@ -45,7 +45,7 @@ public class Master {
 	private static int numOfCopies = 3;
 
 	public Master() {
-		readFromJSONFile();
+		ArrayList<MainChunk> tempMainChunkList = readFromJSONFile();
 		chunkInfoList = new HashMap<Integer, ChunkInfo>();
 		for (SlaveSocket slave : slaves) {
 			try {
@@ -59,8 +59,13 @@ public class Master {
 			}
 		}
 		masterRand = new Random();
-		for (MainChunk mainChunk : mainChunkList.values()) {
+		mainChunkList = new HashMap<Integer, MainChunk>();
+		for (MainChunk mainChunk : tempMainChunkList) {
 			ArrayList<Integer> chunkIds = mainChunk.getChunkIds();
+			String path = mainChunk.getFilePath();
+			int delimeter = path.lastIndexOf("/");
+			String folderPath = path.substring(0, delimeter);
+			String fileName = path.substring(delimeter + 1);
 			int newMainChunkId = chunkIds.get(masterRand.nextInt(chunkIds.size()));
 			ArrayList<ChunkInfo> copyChunkInfoList = new ArrayList<ChunkInfo>();
 			for (int chunkId : chunkIds) {
@@ -71,9 +76,21 @@ public class Master {
 				}
 			}
 			try {
-				if (!findSlaveWithIP(chunkInfoList.get(newMainChunkId).slaveIP).assignMainChunk(newMainChunkId,
-						copyChunkInfoList))
+				if (findSlaveWithIP(chunkInfoList.get(newMainChunkId).slaveIP).assignMainChunk(newMainChunkId,
+						copyChunkInfoList)) {
+					FileNode fileNode = fileHierarchy.openFile(folderPath, fileName);
+					if (fileNode != null) {
+						int newFileIndex = fileNode.changeChunk(mainChunk.getChunkIds(), newMainChunkId);
+						for(int chunkId : mainChunk.getChunkIds()) {
+							chunkInfoList.get(chunkId).fileIndex = newFileIndex;
+						}
+					}
+					else
+						throw new IOException();
+					mainChunkList.put(newMainChunkId, mainChunk);
+				} else {
 					throw new IOException();
+				}
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -82,7 +99,7 @@ public class Master {
 		new RentImpl().start();
 	}
 
-	private void readFromJSONFile() {
+	private ArrayList<MainChunk> readFromJSONFile() {
 		try {
 			StringBuilder sb = new StringBuilder();
 			BufferedReader br = new BufferedReader(new FileReader(serializedJSONFileName));
@@ -105,7 +122,7 @@ public class Master {
 				SlaveSocket slave = new SlaveSocket(obj.getString("ip"), obj.getInt("port"));
 				slaves.add(slave);
 			}
-			mainChunkList = new HashMap<Integer, MainChunk>();
+			ArrayList<MainChunk> tempMainChunkList = new ArrayList<MainChunk>();
 			JSONObject mainChunkListJSON = config.getJSONObject("main_chunk_list");
 			for (String key : mainChunkListJSON.keySet()) {
 				JSONObject mainChunkJSON = mainChunkListJSON.getJSONObject(key);
@@ -114,17 +131,18 @@ public class Master {
 				for (int i = 0; i < idsJSON.length(); i++) {
 					ids.add(idsJSON.getInt(i));
 				}
-				mainChunkList.put(Integer.parseInt(key),
-						new MainChunk(Integer.parseInt(key), ids, mainChunkJSON.getString("file_path")));
+				tempMainChunkList.add(new MainChunk(Integer.parseInt(key), ids, mainChunkJSON.getString("file_path")));
 			}
+			return tempMainChunkList;
 		} catch (FileNotFoundException | JSONException e) {
 			fileHierarchy = new FileHierarchy();
 			nextFileHandleId = 0;
 			nextChunkId = 0;
 			slaves = new ArrayList<SlaveSocket>();
-			mainChunkList = new HashMap<Integer, MainChunk>();
+			return new ArrayList<MainChunk>();
 		} catch (IOException e) {
 			e.printStackTrace();
+			return null;
 		}
 	}
 
@@ -332,8 +350,7 @@ public class Master {
 						if (slave.assignMainChunk(newMainChunkId, copyChunkInfoList)) {
 							FileNode fileNode = fileHierarchy.openFile(folderPath, fileName);
 							if (fileNode != null) {
-								fileNode.removeChunk(mainChunkId);
-								fileNode.addChunk(newMainChunkId);
+								fileNode.changeChunk(mainChunk.getChunkIds(), newMainChunkId);
 								break;
 							} else {
 								return -1;
@@ -532,7 +549,6 @@ public class Master {
 				clientWorker.start();
 			}
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
